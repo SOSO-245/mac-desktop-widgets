@@ -1,0 +1,11 @@
+{
+  "data": [],
+  "pagination": {
+    "has_more": false,
+    "next_cursor": null
+  },
+  "meta": {
+    "api_version": "v1",
+    "generated_at": "2026-10-22T15:55:00Z"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "data": {
+    "latest_reset": null,
+    "scheduled_reset": null,
+    "active_watch": null,
+    "stats": {
+      "total": 0,
+      "last_reset_at": null,
+      "days_since_last": null,
+      "avg_interval_days": null
+    }
+  },
+  "meta": {
+    "api_version": "v1",
+    "generated_at": "2026-10-22T15:55:00Z"
+  }
+}

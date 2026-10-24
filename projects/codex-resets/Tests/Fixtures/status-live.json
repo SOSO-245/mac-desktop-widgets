@@ -1,0 +1,39 @@
+{
+  "data": {
+    "latest_reset": {
+      "id": "2112432076767289678",
+      "reset_type": "regular",
+      "announced_at": "2026-10-20T06:33:48.000Z",
+      "text": "Day 15/ Nevermind, we're still cooking... and reset. Enjoy. https://t.co/RZ9WhtI802",
+      "source": {
+        "type": "x_post",
+        "author": "thsottiaux",
+        "url": "https://x.com/thsottiaux/status/2112432076767289678"
+      }
+    },
+    "scheduled_reset": {
+      "id": "2113162413008884099",
+      "status": "scheduled",
+      "reset_type": "regular",
+      "announced_at": "2026-10-22T06:55:54.000Z",
+      "scheduled_for": "2026-10-22T17:00:00.000Z",
+      "text": "Lands tomorrow before 10am PST.",
+      "source": {
+        "type": "x_post",
+        "author": "thsottiaux",
+        "url": "https://x.com/thsottiaux/status/2113162413008884099"
+      }
+    },
+    "active_watch": null,
+    "stats": {
+      "total": 64,
+      "last_reset_at": "2026-10-20T06:33:48.000Z",
+      "days_since_last": 2.4,
+      "avg_interval_days": 6.3
+    }
+  },
+  "meta": {
+    "api_version": "v1",
+    "generated_at": "2026-10-22T15:55:00.905Z"
+  }
+}

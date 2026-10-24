@@ -1,0 +1,138 @@
+import Foundation
+import Combine
+
+@MainActor
+final class MonitorCoordinator: ObservableObject {
+    @Published var snapshot = MonitorSnapshot()
+    @Published var proxies: [String:[String:Any]] = [:]
+    @Published var providers: [String:[String:Any]] = [:]
+    @Published var switching = false
+    @Published var actionMessage = ""
+    private(set) var settings = ConnectionSettings.load()
+    private(set) var api: NikkiAPI?
+    var client: ProxyClient { .nikki }
+    private var timer: Task<Void,Never>?
+    private var polling: Task<Void,Never>?
+    private var stream: Task<Void,Never>?
+    private var socket: URLSessionWebSocketTask?
+    private var lastTraffic: Date?
+    private var generation = UUID()
+    var groups: [String] { proxies.keys.filter { proxies[$0]?["type"] as? String == "Selector" }.sorted() }
+    var subscriptions: [String] { providers.keys.filter { providers[$0]?["subscriptionInfo"] != nil }.sorted() }
+    func start() {
+        stop()
+        api = NikkiAPI(settings: settings, secret: Vault.read(settings.endpoint))
+        refresh()
+        timer = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
+                guard let self else { return }
+                if let last = self.lastTraffic, Date().timeIntervalSince(last) > 8 {
+                    self.socket?.cancel(with: .goingAway, reason: nil); self.stream?.cancel(); self.stream = nil; self.socket = nil
+                    self.snapshot.uploadBps = nil; self.snapshot.downloadBps = nil
+                    self.snapshot.speedHistory = []; self.snapshot.uploadSpeedHistory = []; self.lastTraffic = nil
+                }
+                self.refresh()
+            }
+        }
+    }
+    func stop() {
+        generation = UUID(); timer?.cancel(); polling?.cancel(); stream?.cancel()
+        timer = nil; polling = nil; stream = nil
+        socket?.cancel(with: .goingAway, reason: nil); socket = nil; api?.close(); api = nil; lastTraffic = nil
+    }
+    func save(_ new: ConnectionSettings, secret: String?) throws {
+        var new = new; new.endpoint = try ConnectionSettings.normalized(new.endpoint)
+        if let secret { try Vault.save(secret, endpoint: new.endpoint) }
+        switching = false; actionMessage = ""; settings = new; new.save(); proxies = [:]; providers = [:]; snapshot = MonitorSnapshot(); start()
+    }
+    func chooseGroup(_ group: String) {
+        guard groups.contains(group) else { return }
+        settings.group = group; settings.save(); applyProxies(); refresh()
+    }
+    func chooseProvider(_ name: String) {
+        settings.provider = name; settings.save(); applySubscription()
+    }
+    private func applyProxies() {
+        let group = settings.group
+        snapshot.groupName = group
+        snapshot.nodeName = NikkiData.leaf(group, proxies: proxies)
+        snapshot.latencyMS = snapshot.nodeName.flatMap { NikkiData.recentDelay(proxies[$0]) }
+        snapshot.latencyKind = "Nikki 最近测速"
+        snapshot.routeIdentity = settings.endpoint + "|" + group + "|" + proxies.keys.sorted().compactMap { name in
+            (proxies[name]?["now"] as? String).map { name + ":" + $0 }
+        }.joined(separator: "|")
+        if proxies[group] == nil { snapshot.metadataIssue = "请选择策略组" } else { snapshot.metadataIssue = nil }
+    }
+    private func applySubscription() {
+        let chosen = settings.provider.isEmpty ? (subscriptions.count == 1 ? subscriptions.first : nil) : settings.provider
+        snapshot.profileName = chosen ?? (subscriptions.isEmpty ? "旁路由" : "请选择套餐")
+        NikkiData.subscription(chosen.flatMap { providers[$0] }, snapshot: &snapshot)
+    }
+    func refresh() {
+        guard polling == nil, let api else { return }
+        let token = generation
+        polling = Task {
+            do {
+                let data = try await api.json(["proxies"])
+                guard generation == token, !Task.isCancelled else { return }
+                guard let p = data["proxies"] as? [String:[String:Any]] else { throw URLError(.cannotParseResponse) }
+                proxies = p; snapshot.isConnected = true; snapshot.isRunning = true
+                snapshot.connectionState = "已连接旁路由"; snapshot.sampledAt = Date(); applyProxies()
+                if stream == nil { startTraffic(api, token: token) }
+                do {
+                    let data = try await api.json(["providers","proxies"])
+                    guard generation == token, !Task.isCancelled else { return }
+                    providers = data["providers"] as? [String:[String:Any]] ?? [:]
+                } catch { guard generation == token else { return }; providers = [:] }
+                applySubscription()
+            } catch {
+                guard generation == token, !Task.isCancelled else { return }
+                snapshot.isConnected = false; snapshot.connectionState = (error as? APIError)?.localizedDescription ?? ((error as? URLError)?.code == .notConnectedToInternet ? "请允许本地网络访问" : "旁路由暂时无法连接")
+                snapshot.nodeName = nil; snapshot.latencyMS = nil; snapshot.uploadBps = nil; snapshot.downloadBps = nil
+                snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
+                proxies = [:]; providers = [:]; applySubscription()
+                socket?.cancel(with: .goingAway, reason: nil); stream?.cancel(); stream = nil; socket = nil
+            }
+            guard generation == token else { return }; polling = nil
+        }
+    }
+    private func startTraffic(_ api: NikkiAPI, token: UUID) {
+        guard let request = try? api.request(["traffic"], websocket: true) else { return }
+        let socket = api.session.webSocketTask(with: request); self.socket = socket; socket.resume(); lastTraffic = Date()
+        stream = Task {
+            do {
+                while !Task.isCancelled {
+                    let message = try await socket.receive()
+                    guard generation == token, !Task.isCancelled else { return }
+                    let data: Data
+                    switch message { case .data(let d): data = d; case .string(let s): data = Data(s.utf8); @unknown default: continue }
+                    guard let json = try JSONSerialization.jsonObject(with: data) as? [String:Any] else { continue }
+                    snapshot.uploadBps = NikkiData.number(json["up"]); snapshot.downloadBps = NikkiData.number(json["down"])
+                    if let down = snapshot.downloadBps { snapshot.speedHistory = Array((snapshot.speedHistory + [down]).suffix(30)) }
+                    if let up = snapshot.uploadBps { snapshot.uploadSpeedHistory = Array((snapshot.uploadSpeedHistory + [up]).suffix(30)) }
+                    lastTraffic = Date()
+                }
+            } catch {
+                guard generation == token, !Task.isCancelled else { return }
+                snapshot.uploadBps = nil; snapshot.downloadBps = nil; stream = nil; self.socket = nil
+            }
+        }
+    }
+    func select(node: String) {
+        guard !switching, let api, snapshot.isConnected else { return }
+        let group = settings.group, token = generation
+        switching = true; actionMessage = "正在切换…"
+        Task {
+            do {
+                try await api.select(group: group, node: node)
+                guard generation == token else { return }
+                actionMessage = "已切换到 \(node)"; refresh()
+            } catch {
+                guard generation == token else { return }
+                actionMessage = (error as? APIError)?.localizedDescription ?? "切换失败，请检查连接"
+            }
+            switching = false
+        }
+    }
+}

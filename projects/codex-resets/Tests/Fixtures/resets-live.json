@@ -1,0 +1,67 @@
+{
+  "data": [
+    {
+      "id": "2112432076767289678",
+      "reset_type": "regular",
+      "announced_at": "2026-10-20T06:33:48.000Z",
+      "text": "Day 15/ Nevermind, we're still cooking... and reset. Enjoy. https://t.co/RZ9WhtI802",
+      "source": {
+        "type": "x_post",
+        "author": "thsottiaux",
+        "url": "https://x.com/thsottiaux/status/2112432076767289678"
+      }
+    },
+    {
+      "id": "2111566005684289735",
+      "reset_type": "regular",
+      "announced_at": "2026-10-17T21:12:21.000Z",
+      "text": "Done",
+      "source": {
+        "type": "x_post",
+        "author": "thsottiaux",
+        "url": "https://x.com/thsottiaux/status/2111566005684289735"
+      }
+    },
+    {
+      "id": "2110618732666257557",
+      "reset_type": "regular",
+      "announced_at": "2026-10-15T06:28:13.000Z",
+      "text": "Done and dusted https://t.co/0fehr43VS4",
+      "source": {
+        "type": "x_post",
+        "author": "thsottiaux",
+        "url": "https://x.com/thsottiaux/status/2110618732666257557"
+      }
+    },
+    {
+      "id": "2109873287853707513",
+      "reset_type": "regular",
+      "announced_at": "2026-10-13T05:06:06.000Z",
+      "text": "What would you like with your side of reset? It's done. https://t.co/gpNaB6otgy",
+      "source": {
+        "type": "x_post",
+        "author": "thsottiaux",
+        "url": "https://x.com/thsottiaux/status/2109873287853707513"
+      }
+    },
+    {
+      "id": "2109132167112782291",
+      "reset_type": "regular",
+      "announced_at": "2026-10-11T04:01:09.000Z",
+      "text": "Put the reset in the bag. All propagated. https://t.co/HGxaD3Zdcj",
+      "source": {
+        "type": "x_post",
+        "author": "thsottiaux",
+        "url": "https://x.com/thsottiaux/status/2109132167112782291"
+      }
+    }
+  ],
+  "pagination": {
+    "has_more": true,
+    "next_cursor": "eyJ2IjoxLCJvcmRlciI6ImRlc2MiLCJhbm5vdW5jZWRfYXQiOiIyMDI2LTEwLTExVDA0OjAxOjA5LjAwMFoiLCJpZCI6IjIxMDkxMzIxNjcxMTI3ODIyOTEiLCJmcm9tIjpudWxsLCJ0byI6bnVsbH0"
+  },
+  "meta": {
+    "api_version": "v1",
+    "generated_at": "2026-10-22T15:51:00.844Z"
+  }
+}
