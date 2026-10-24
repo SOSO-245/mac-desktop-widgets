@@ -208,6 +208,7 @@ struct DisplaySettings:View {
                 Image(nsImage:MenuIconRenderer.image(draft.menuIcon))
                 Text(draft.menuTitle(now:Date(),holidays:model.holidays).isEmpty ? "仅显示图标" : draft.menuTitle(now:Date(),holidays:model.holidays)).font(.system(size:12)).lineLimit(1)
             }.padding(8).background(.white.opacity(0.07),in:RoundedRectangle(cornerRadius:8))
+            Button("自定义菜单栏文字、图标与颜色…") { NotificationCenter.default.post(name:Notification.Name("CalendarCustomizeMenu"),object:nil) }
             Text("菜单栏显示项目").font(.system(size:13,weight:.semibold)).foregroundStyle(jade)
             HStack(spacing:16) {Toggle("日期",isOn:$draft.showDate);Toggle("年份",isOn:$draft.showYear).disabled(!draft.showDate);Toggle("星期",isOn:$draft.showWeekday)}
             HStack(spacing:16) {Toggle("农历",isOn:$draft.showLunar);Toggle("假期名称",isOn:$draft.showHoliday)}

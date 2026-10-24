@@ -39,7 +39,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let sites = SiteLatencyMonitor()
     private var size = CardSize(rawValue: UserDefaults.standard.string(forKey: "cardSize") ?? "") ?? .medium
     private var menuSite = UserDefaults.standard.string(forKey: "menuLatencySite") ?? "Google"
-    private var cardVisible = true
+    private var cardVisible = !UserDefaults.standard.bool(forKey: "cardHidden")
     private var panel: CardPanel!
     private var host: CardHostingView!
     private var statusItem: NSStatusItem!
@@ -96,7 +96,8 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         monitor.start()
         configureSites()
         setSize(self.size)
-        panel.orderFrontRegardless()
+        if cardVisible { panel.orderFrontRegardless() } else { panel.orderOut(nil) }
+        updateVisibilityMark()
         observer = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in Task { @MainActor in self?.refresh() } }
@@ -129,6 +130,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         add("打开当前软件", #selector(openFlClash))
         add("切换 FlClash / Shadowrocket", #selector(switchClient))
         add("菜单栏显示", #selector(showMenuSettings))
+        add("菜单栏文字与图标…", #selector(customizeMenu))
         add("刷新数据", #selector(refresh))
         let sizes = NSMenuItem(title: "卡片尺寸", action: nil, keyEquivalent: "")
         sizes.submenu = NSMenu()
@@ -157,19 +159,44 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(.separator())
         add("退出实时卡片", #selector(quit))
         statusItem.menu = menu
+        updateVisibilityMark()
         updateStatus()
     }
 
     private func updateLevel() {
         panel.level = alwaysOnTop ? .floating : NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
     }
-    @objc private func showCard() { cardVisible = true; configureSites(); panel.orderFrontRegardless() }
-    @objc private func hideCard() { cardVisible = false; configureSites(); panel.orderOut(nil) }
+    @objc private func showCard() { cardVisible = true; UserDefaults.standard.set(false,forKey:"cardHidden"); updateVisibilityMark(); configureSites(); panel.orderFrontRegardless() }
+    @objc private func hideCard() { if !cardVisible { showCard(); return }; cardVisible = false; UserDefaults.standard.set(true,forKey:"cardHidden"); updateVisibilityMark(); configureSites(); panel.orderOut(nil) }
+    private func updateVisibilityMark() {
+        statusItem.menu?.items.first(where: { $0.action == #selector(hideCard) })?.state = cardVisible ? .off : .on
+        statusItem.menu?.items.first(where: { $0.action == #selector(showCard) })?.state = cardVisible ? .on : .off
+    }
     @objc private func centerCard() { panel.center(); showCard() }
     @objc private func openFlClash() {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: monitor.client.appPath), configuration: configuration)
+    }
+    private func customMenuFields()->[MenuField] {
+        let s=monitor.snapshot,reading=sites.readings[menuSite]
+        let palette=MenuBarPalette.load()
+        let remaining=MenuBarDisplay.remaining(used:s.usedBytes,total:s.totalBytes)
+        return [MenuField(id:"site",title:"站点名称",value:menuSite,color:MenuBarPalette.color(palette.name)),
+                MenuField(id:"latency",title:"站点延迟",value:reading?.milliseconds.map { "\($0) ms" } ?? "—",color:MenuBarPalette.color(MenuBarDisplay.isSlow(milliseconds:reading?.milliseconds) ? palette.slow : palette.fast),colorKey:MenuBarDisplay.isSlow(milliseconds:reading?.milliseconds) ? "slow" : "fast"),
+                MenuField(id:"profile",title:"套餐名称",value:s.profileName ?? "—"),
+                MenuField(id:"ring",title:"剩余额度圆环",value:"",color:MenuBarPalette.color(palette.ring),ring:true,progress:remaining),
+                MenuField(id:"quota",title:"剩余额度",value:remaining.map { String(format:"剩 %.0f%%",$0*100) } ?? "剩 —",color:MenuBarPalette.color(palette.ring)),
+                MenuField(id:"node",title:"当前节点",value:s.nodeName ?? "—",defaultVisible:false),
+                MenuField(id:"connections",title:"当前连接数",value:s.isConnected ? s.connectionCount.map { "\($0) 连接" } ?? "—" : "—",defaultVisible:false),
+                MenuField(id:"expiry",title:"到期倒计时",value:SubscriptionCountdown.text(expiry:s.expiresAt),defaultVisible:false),
+                MenuField(id:"download",title:"下载速度",value:MenuBarDisplay.rate(s.downloadBps),color:.cyan,defaultVisible:false),
+                MenuField(id:"upload",title:"上传速度",value:MenuBarDisplay.rate(s.uploadBps),color:.systemPurple,defaultVisible:false)]
+    }
+    @objc private func customizeMenu() {
+        MenuCustomizationPanel.shared.show(title:monitor.snapshot.client.title,fields:customMenuFields(),icon:ProbeSite.icon(menuSite),extraColors:[("fast","常规延迟",MenuCustomization.color("#66FFAD")),("slow","超过 2000 ms",MenuCustomization.color("#FF6EC2"))]) { [weak self] in
+            self?.lastStatusDisplayKey=nil;self?.updateStatus()
+        }
     }
     @objc private func showMenuSettings() {
         if menuSettingsWindow == nil {
@@ -242,6 +269,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         button.toolTip = "\(snapshot.client.title) · \(profile)\n\(menuSite)：\(reading?.status ?? "待检测") · \(delay)\n套餐剩余 \(progress) · \(sites.routeLabel)\nHTTPS 首响应，每分钟更新"
         button.setAccessibilityLabel(button.toolTip)
+        MenuCustomizationPanel.apply(button,fields:customMenuFields(),icon:ProbeSite.icon(menuSite))
     }
     @objc private func toggleLogin() {
         do {

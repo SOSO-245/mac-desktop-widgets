@@ -465,14 +465,16 @@ private enum ModelTests {
             try check(ResetMenuDisplay.make(snapshot:snapshot,now:now).text == "重置时间待定", "Unknown date was fabricated")
             try check(ResetMenuDisplay.make(snapshot:.empty,now:now).text == "重置 —", "Empty state must not count down")
         }
-        try await run("No schedule shows elapsed whole days in green, never guesses a reset") {
+        try await run("No schedule shows elapsed days and hours in green, never guesses a reset") {
             let now = Date()
             let last = now.addingTimeInterval(-2 * 86400)
             let stats = ResetStats(total:1,lastResetAt:last,daysSinceLast:99,avgIntervalDays:nil)
             var snapshot = ResetSnapshot(status:ResetStatus(latestReset:nil,scheduledReset:nil,activeWatch:nil,stats:stats),history:[],checkedAt:now,generatedAt:now,issue:nil)
             let display = ResetMenuDisplay.make(snapshot:snapshot,now:now)
-            try check(display.text == "上次重置已过 2 天" && display.tone == .green,"Elapsed days should use timestamp, not stale API day count")
-            try check(ResetMenuDisplay.make(snapshot:snapshot,now:now.addingTimeInterval(-1)).text.hasSuffix("1 天"),"Whole-day boundary is incorrect")
+            try check(display.text == "已重置 2 天 0 小时" && display.tone == .green,"Elapsed days should use timestamp, not stale API day count")
+            try check(ResetMenuDisplay.make(snapshot:snapshot,now:now.addingTimeInterval(-1)).text == "已重置 1 天 23 小时","Whole-day boundary is incorrect")
+            try check(ResetMenuDisplay.make(snapshot:snapshot,now:last.addingTimeInterval(3599)).text == "已重置 0 天 0 小时", "Partial hour must not round up")
+            try check(ResetMenuDisplay.make(snapshot:snapshot,now:last.addingTimeInterval(3600)).text == "已重置 0 天 1 小时", "Exact hour boundary is incorrect")
             snapshot.status = ResetStatus(latestReset:nil,scheduledReset:nil,activeWatch:ActiveWatch(expiresAt:now.addingTimeInterval(60)),stats:stats)
             try check(ResetMenuDisplay.make(snapshot:snapshot,now:now).text == display.text,"Watch must not invent a schedule")
             snapshot.status = ResetStatus(latestReset:nil,scheduledReset:nil,activeWatch:nil,stats:ResetStats(total:0,lastResetAt:nil,daysSinceLast:nil,avgIntervalDays:nil))

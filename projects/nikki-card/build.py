@@ -30,11 +30,12 @@ def main():
     info = dict(CFBundleDevelopmentRegion='zh_CN', CFBundleName=NAME,
                 CFBundleDisplayName=NAME, CFBundleExecutable='NikkiLive',
                 CFBundleIdentifier=BUNDLE, CFBundlePackageType='APPL',
-                CFBundleShortVersionString='1.0.2',
+                CFBundleShortVersionString='1.1.0',
                 CFBundleVersion=datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
                 LSMinimumSystemVersion='14.0', LSUIElement=True,
                 NSHighResolutionCapable=True, NSPrincipalClass='NSApplication',
                 NSLocalNetworkUsageDescription='连接你设置的旁路由 Nikki，读取实时流量、套餐和节点，并按你的选择切换节点。')
+    info['CFBundleURLTypes'] = [dict(CFBundleURLName=BUNDLE+'.navigation',CFBundleURLSchemes=['nikki'])]
     icon = ROOT / 'Assets/AppIcon.icns'
     if icon.exists():
         run('ditto', '--norsrc', icon, resources / 'AppIcon.icns')
@@ -51,6 +52,7 @@ def main():
             *sources, '-o', binary)
         binaries.append(binary)
     run('lipo', '-create', *binaries, '-output', macos / 'NikkiLive')
+    run('python3', ROOT / 'Widget/build_widget.py', app)
     run('xattr', '-cr', app)
     run('codesign', '--force', '--sign', '-', app)
     run('codesign', '--verify', '--deep', '--strict', app)
@@ -71,7 +73,7 @@ def main():
     sha = hashlib.sha256(archive.read_bytes()).hexdigest()
     source_archive = delivery / 'Nikki实时卡片-源码.zip'
     with zipfile.ZipFile(source_archive, 'w', compression=zipfile.ZIP_DEFLATED) as package:
-        for folder in ('Sources', 'Tests', 'Assets'):
+        for folder in ('Sources', 'Tests', 'Assets', 'Widget'):
             for file in sorted((ROOT / folder).rglob('*')):
                 if file.is_file():
                     package.write(file, Path(ROOT.name) / file.relative_to(ROOT))

@@ -141,6 +141,7 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        WidgetSelfRepair.shared.start()
         installMenu()
         installStatusItem()
         maintainData()
@@ -232,7 +233,8 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         for (title, action) in [("管理与预览…", #selector(showManager)),
                                 ("打开重置网站", #selector(openWebsite)),
-                                ("刷新重置数据", #selector(refreshStatus))] {
+                                ("刷新重置数据", #selector(refreshStatus)),
+                                ("菜单栏显示与配色…", #selector(customizeMenu))] {
             let entry = NSMenuItem(title:title,action:action,keyEquivalent:"")
             entry.target = self; menu.addItem(entry)
         }
@@ -258,6 +260,21 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
         }
         tooltip += "\n" + store.snapshot.freshness(at:Date()) + " · 显示每秒更新，公共数据每 5 分钟检查"
         button.toolTip = tooltip; button.setAccessibilityLabel("Codex 重置 " + display.text)
+        button.image=NSImage(systemSymbolName:"clock.arrow.circlepath",accessibilityDescription:nil);button.imagePosition = .imageLeading
+        MenuCustomizationPanel.apply(button,fields:customMenuFields(),icon:button.image)
+    }
+    private func customMenuFields()->[MenuField] {
+        let snapshot=store.snapshot,display=ResetMenuDisplay.make(snapshot:store.snapshot,now:Date())
+        let key=display.tone == .green ? "elapsed" : display.tone == .pink ? "planned" : "neutral"
+        let color=MenuCustomization.color(key == "elapsed" ? "#66FFAD" : key == "planned" ? "#FF6EC2" : "#FFFFFF")
+        let last=snapshot.status?.stats.lastResetAt ?? snapshot.status?.latestReset?.announcedAt ?? snapshot.history.map(\.announcedAt).max()
+        return [MenuField(id:"timer",title:"重置计时 / 状态",value:display.text,color:color,colorKey:key),
+                MenuField(id:"name",title:"应用名称",value:"Codex 重置",defaultVisible:false),
+                MenuField(id:"last",title:"上次重置日期",value:last?.formatted(date:.abbreviated,time:.shortened) ?? "—",defaultVisible:false),
+                MenuField(id:"clock",title:"当前时间",value:Date().formatted(date:.omitted,time:.shortened),defaultVisible:false)]
+    }
+    @objc private func customizeMenu() {
+        MenuCustomizationPanel.shared.show(title:"Codex 重置",fields:customMenuFields(),icon:NSImage(systemSymbolName:"clock.arrow.circlepath",accessibilityDescription:nil),extraColors:[("elapsed","无计划：经过时间",MenuCustomization.color("#66FFAD")),("planned","有计划：倒计时",MenuCustomization.color("#FF6EC2")),("neutral","未知 / 缓存状态",.white)]) { [weak self] in self?.updateStatusItem() }
     }
     @objc private func openWebsite() { NSWorkspace.shared.open(resetsWebsite) }
     @objc private func refreshStatus() {

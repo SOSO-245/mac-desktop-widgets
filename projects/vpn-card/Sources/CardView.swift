@@ -274,6 +274,9 @@ struct FlClashCard: View {
                 .truncationMode(snapshot.isConnected ? .middle : .tail)
                 .help(([snapshot.groupName, snapshot.nodeName].compactMap { $0 }.joined(separator: " → ") + "\n" + snapshot.connectionState))
             Spacer(minLength: 3)
+            Text(snapshot.isConnected ? snapshot.connectionCount.map { "\($0) 连" } ?? "— 连" : "— 连")
+                .font(.system(size:9,weight:.medium)).foregroundStyle(secondary).fixedSize()
+                .help("当前活跃连接数").accessibilityLabel("当前连接数").accessibilityValue(snapshot.connectionCount.map(String.init) ?? "未知")
             if snapshot.isConnected {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Image(systemName: "waveform.path")

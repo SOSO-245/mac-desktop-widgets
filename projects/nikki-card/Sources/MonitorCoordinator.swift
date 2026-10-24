@@ -63,10 +63,11 @@ final class MonitorCoordinator: ObservableObject {
             (proxies[name]?["now"] as? String).map { name + ":" + $0 }
         }.joined(separator: "|")
         if proxies[group] == nil { snapshot.metadataIssue = "请选择策略组" } else { snapshot.metadataIssue = nil }
+        applySubscription()
     }
     private func applySubscription() {
-        let chosen = settings.provider.isEmpty ? (subscriptions.count == 1 ? subscriptions.first : nil) : settings.provider
-        snapshot.profileName = chosen ?? (subscriptions.isEmpty ? "旁路由" : "请选择套餐")
+        let chosen = NikkiData.matchingProvider(group:settings.group, selected:settings.provider, proxies:proxies, providers:providers)
+        snapshot.profileName = chosen ?? (subscriptions.isEmpty ? "旁路由" : "未匹配套餐")
         NikkiData.subscription(chosen.flatMap { providers[$0] }, snapshot: &snapshot)
     }
     func refresh() {
@@ -78,18 +79,22 @@ final class MonitorCoordinator: ObservableObject {
                 guard generation == token, !Task.isCancelled else { return }
                 guard let p = data["proxies"] as? [String:[String:Any]] else { throw URLError(.cannotParseResponse) }
                 proxies = p; snapshot.isConnected = true; snapshot.isRunning = true
-                snapshot.connectionState = "已连接旁路由"; snapshot.sampledAt = Date(); applyProxies()
+                snapshot.connectionState = "已连接旁路由"; snapshot.sampledAt = Date()
                 if stream == nil { startTraffic(api, token: token) }
                 do {
                     let data = try await api.json(["providers","proxies"])
                     guard generation == token, !Task.isCancelled else { return }
                     providers = data["providers"] as? [String:[String:Any]] ?? [:]
                 } catch { guard generation == token else { return }; providers = [:] }
-                applySubscription()
+                let connections = try? await api.json(["connections"])
+                guard generation == token, !Task.isCancelled else { return }
+                snapshot.connectionCount = ConnectionMetrics.count(connections)
+                proxies = NikkiData.includingProviderNodes(p,providers:providers)
+                applyProxies()
             } catch {
                 guard generation == token, !Task.isCancelled else { return }
                 snapshot.isConnected = false; snapshot.connectionState = (error as? APIError)?.localizedDescription ?? ((error as? URLError)?.code == .notConnectedToInternet ? "请允许本地网络访问" : "旁路由暂时无法连接")
-                snapshot.nodeName = nil; snapshot.latencyMS = nil; snapshot.uploadBps = nil; snapshot.downloadBps = nil
+                snapshot.connectionCount = nil; snapshot.nodeName = nil; snapshot.latencyMS = nil; snapshot.uploadBps = nil; snapshot.downloadBps = nil
                 snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
                 proxies = [:]; providers = [:]; applySubscription()
                 socket?.cancel(with: .goingAway, reason: nil); stream?.cancel(); stream = nil; socket = nil

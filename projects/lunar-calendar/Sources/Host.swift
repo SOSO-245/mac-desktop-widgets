@@ -238,6 +238,7 @@ struct MenuCalendar:View {
     var appearanceObserver:NSKeyValueObservation?
     var interactionMonitor:Any?
     func applicationDidFinishLaunching(_ notification:Notification) {
+        WidgetSelfRepair.shared.start()
         if let url=Bundle.main.url(forResource:"AppIcon",withExtension:"icns") {NSApp.applicationIconImage=NSImage(contentsOf:url)}
         let menu=NSMenu();let item=NSMenuItem();let appMenu=NSMenu()
         appMenu.addItem(withTitle:"退出万年历",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"q");item.submenu=appMenu;menu.addItem(item);NSApp.mainMenu=menu
@@ -257,6 +258,7 @@ struct MenuCalendar:View {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool {false}
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {show();return true}
     func installStatusItem() {
+        NotificationCenter.default.addObserver(self,selector:#selector(customizeMenu),name:Notification.Name("CalendarCustomizeMenu"),object:nil)
         status=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
         status?.button?.image=MenuIconRenderer.image(model.data.menuIcon)
         status?.button?.imagePosition = .imageOnly
@@ -282,6 +284,17 @@ struct MenuCalendar:View {
             WidgetCenter.shared.reloadTimelines(ofKind:calendarWidgetKind)
         }
     }
+    private func customMenuFields()->[MenuField] {
+        let now=Date()
+        return [MenuField(id:"date",title:"公历日期",value:"\(Almanac.gregorian.component(.month,from:now))月\(Almanac.day(now))日"),
+                MenuField(id:"lunar",title:"农历日期",value:Almanac.lunar(now)),
+                MenuField(id:"year",title:"年份",value:"\(Almanac.year(now))年",defaultVisible:false),
+                MenuField(id:"weekday",title:"星期",value:Almanac.weekday(now),defaultVisible:false),
+                MenuField(id:"holiday",title:"法定节假日",value:model.holidays.day(now)?.name ?? "—",defaultVisible:false)]
+    }
+    @objc private func customizeMenu() {
+        MenuCustomizationPanel.shared.show(title:"万年历",fields:customMenuFields(),icon:MenuIconRenderer.image(model.data.menuIcon)) { [weak self] in self?.refreshStatus() }
+    }
     func refreshStatus() {
         model.returnIfIdle()
         let now=Date()
@@ -293,6 +306,7 @@ struct MenuCalendar:View {
             }
             button.title=""
             button.setAccessibilityLabel("万年历 "+title)
+            MenuCustomizationPanel.apply(button,fields:customMenuFields(),icon:MenuIconRenderer.image(model.data.menuIcon))
         }
         try? CalendarDataStore.mirror(model.data)
         status?.button?.toolTip="万年历 · \(Almanac.weekday(now)) · 点击查看月历"

@@ -46,6 +46,7 @@ struct MenuBarSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("恢复默认") { options=MenuBarOptions();palette=MenuBarPalette() }
+                Button("文字与图标…") { NSApp.sendAction(Selector(("customizeMenu")),to:NSApp.delegate,from:nil) }
                 Spacer()
                 Button("保存显示设置") { options.save(); palette.save(); onSave(options) }.buttonStyle(.borderedProminent)
             }

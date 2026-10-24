@@ -11,3 +11,7 @@
 - 应用图标与玻璃纹理：项目原创绘制或 AI 辅助生成，不使用 Home Assistant 或其他官方应用图标。原生 SF Symbols 由 macOS 在运行时提供，不单独打包字体。
 
 根 MIT 许可适用于原创代码；上列第三方文件按各自许可和来源使用，不改变第三方商标或数据权利。
+
+## macmon
+
+Mac 实时监测分发并调用未修改的 macmon v0.10.0 官方 Apple Silicon 二进制。项目：https://github.com/vladkens/macmon ，MIT 许可证保存在 projects/mac-vitals/Vendor/LICENSE；固定源提交 5df67a54e082e0b30a0aa2b48b7c7f78a36f1795。官方原始发行 tar.gz SHA256：0ccff60b7bf67bcb9e09cc8f804656a1cafa7eeae7297ee83d10e460ead7d43d。应用打包时仅重新本地签名。

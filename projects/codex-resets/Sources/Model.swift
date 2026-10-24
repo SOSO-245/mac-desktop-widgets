@@ -245,8 +245,9 @@ struct ResetMenuDisplay {
                   now.timeIntervalSince(last) >= 0, now.timeIntervalSince(last) < 315_360_000 else {
                 return .init(text:"上次重置时间未知",tone:.neutral)
             }
-            let days = Int(now.timeIntervalSince(last) / 86400)
-            return .init(text:(stale ? "缓存 · " : "") + "上次重置已过 \(days) 天",tone:snapshot.isSample ? .neutral : .green)
+            let totalHours = Int(now.timeIntervalSince(last) / 3600)
+            let days = totalHours / 24, hours = totalHours % 24
+            return .init(text:(stale ? "缓存 · " : "") + "已重置 \(days) 天 \(hours) 小时",tone:snapshot.isSample ? .neutral : .green)
         case .unavailable: return .init(text:"重置 —",tone:.neutral)
         }
     }

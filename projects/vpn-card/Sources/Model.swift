@@ -23,6 +23,7 @@ struct MonitorSnapshot {
     var latencyKind = "最近测速"
     var uploadBps: Double?
     var downloadBps: Double?
+    var connectionCount: Int?
     var connectionState = "正在连接 FlClash"
     var isConnected = false
     var isRunning = false
@@ -172,5 +173,11 @@ enum FlClashAuthorization {
         var request = request
         if !secret.isEmpty { request.setValue("Bearer " + secret, forHTTPHeaderField: "Authorization") }
         return request
+    }
+}
+
+enum ConnectionMetrics {
+    static func count(_ payload:[String:Any]?) -> Int? {
+        (payload?["connections"] as? [[String:Any]])?.count
     }
 }

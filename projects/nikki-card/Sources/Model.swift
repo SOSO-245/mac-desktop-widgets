@@ -1,13 +1,13 @@
 import Foundation
 import CoreFoundation
 
-enum ProxyClient: String {
+enum ProxyClient: String, Codable {
     case nikki
     var title: String { "Nikki" }
     var appPath: String { Bundle.main.bundlePath }
 }
 
-struct MonitorSnapshot {
+struct MonitorSnapshot: Codable {
     var client: ProxyClient = .nikki
     var routeIdentity = ""
     var profileName: String?
@@ -23,6 +23,7 @@ struct MonitorSnapshot {
     var latencyKind = "最近测速"
     var uploadBps: Double?
     var downloadBps: Double?
+    var connectionCount: Int?
     var connectionState = "等待连接 Nikki"
     var isConnected = false
     var isRunning = false
@@ -43,3 +44,9 @@ enum SubscriptionCountdown {
     }
 }
 
+
+enum ConnectionMetrics {
+    static func count(_ payload:[String:Any]?) -> Int? {
+        (payload?["connections"] as? [[String:Any]])?.count
+    }
+}

@@ -35,7 +35,7 @@ struct ConnectionView: View {
                 .foregroundStyle(monitor.snapshot.isConnected ? Color.mint : Color.secondary)
             if !monitor.subscriptions.isEmpty {
                 Picker("展示套餐",selection:Binding(get:{monitor.settings.provider},set:{monitor.chooseProvider($0)})) {
-                    Text("自动（仅有一个套餐时）").tag("")
+                    Text("自动跟随当前节点").tag("")
                     ForEach(monitor.subscriptions,id:\.self) { Text($0).tag($0) }
                 }
             }

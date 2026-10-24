@@ -46,7 +46,7 @@ def generate_project():
     def d(values):
         return '{ ' + ' '.join(key + ' = ' + value + ';' for key, value in values.items()) + ' }'
 
-    source_names = ['Model.swift', 'ResetCard.swift', 'Host.swift', 'Widget.swift']
+    source_names = ['WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift', 'Widget.swift']
     for name in source_names:
         obj(name, d({'isa': 'PBXFileReference', 'lastKnownFileType': 'sourcecode.swift',
                      'path': q('Sources/' + name), 'sourceTree': q('<group>')}))
@@ -64,7 +64,7 @@ def generate_project():
     obj('app-resources', d({'isa': 'PBXResourcesBuildPhase', 'buildActionMask': '2147483647',
                            'files': arr([ident('icon-build')]), 'runOnlyForDeploymentPostprocessing': '0'}))
 
-    target_sources = [('app', ['Model.swift', 'ResetCard.swift', 'Host.swift']),
+    target_sources = [('app', ['WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift']),
                       ('widget', ['Model.swift', 'ResetCard.swift', 'Widget.swift'])]
     for target, files in target_sources:
         is_widget = target == 'widget'
@@ -131,7 +131,7 @@ def generate_project():
     }), encoding='utf-8')
 
     common = {
-        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.0.5',
+        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.0.7',
         'CFBundleVersion': datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
         'CFBundleExecutable': '$(EXECUTABLE_NAME)', 'CFBundleIdentifier': '$(PRODUCT_BUNDLE_IDENTIFIER)',
         'CFBundleName': '$(PRODUCT_NAME)', 'LSMinimumSystemVersion': '14.0',

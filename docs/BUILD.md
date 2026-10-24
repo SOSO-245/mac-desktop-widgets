@@ -1,6 +1,6 @@
 # 构建与测试
 
-需要 macOS 14+、完整 Xcode（包含 macOS SDK）、Python 3。VPN/Nikki 卡片也可仅用 Command Line Tools 构建。节气生成工具需 Node.js，但常规构建直接使用已生成数据。
+需要 macOS 14+、完整 Xcode（包含 macOS SDK）、Python 3。仅 VPN 卡片可仅用 Command Line Tools 构建；含 WidgetKit 的项目需要完整 Xcode。节气生成工具需 Node.js，但常规构建直接使用已生成数据。
 
 在任意子项目目录运行：
 
@@ -23,3 +23,5 @@ python3 build.py
 - Nikki：只向本机模拟接口测试认证、请求编码、选择校验、回读、菜单栏配置；不切换真实路由器节点。
 
 公开版与本机定制版使用相同应用标识，便于正常升级，但不适合同时安装两个副本。发布构建不执行安装或启动应用，避免读入开发者的个人数据。通用安装包的 Intel 兼容性需实际硬件进一步验证。
+
+Mac 实时监测：18 项采集解析、时效与网卡计数差值检查，以及 9 项菜单栏检查。Vendor 中提供已核对上游发行包的 Apple Silicon 采集器，构建无需 Rust。

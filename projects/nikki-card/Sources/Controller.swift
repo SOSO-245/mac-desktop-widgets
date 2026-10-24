@@ -116,6 +116,26 @@ enum NikkiData {
         }
         return nil
     }
+    static func includingProviderNodes(_ proxies:[String:[String:Any]],providers:[String:[String:Any]])->[String:[String:Any]] {
+        var result=proxies
+        for provider in providers.keys.sorted() {
+            for node in providers[provider]?["proxies"] as? [[String:Any]] ?? [] {
+                if let name=node["name"] as? String,result[name]==nil { result[name]=node }
+            }
+        }
+        return result
+    }
+    /// Follow the selected group's terminal node; never guess between duplicate names.
+    static func matchingProvider(group: String, selected: String, proxies: [String:[String:Any]], providers: [String:[String:Any]]) -> String? {
+        if !selected.isEmpty { return providers[selected] != nil ? selected : nil }
+        guard let node = leaf(group, proxies: proxies), !["DIRECT", "REJECT", "REJECT-DROP", "PASS"].contains(node) else { return nil }
+        let matches = providers.keys.filter { key in
+            guard providers[key]?["subscriptionInfo"] is [String:Any],
+                  let members = providers[key]?["proxies"] as? [[String:Any]] else { return false }
+            return members.contains { $0["name"] as? String == node }
+        }
+        return matches.count == 1 ? matches.first : nil
+    }
     static func recentDelay(_ node: [String: Any]?, now: Date = Date()) -> Int? {
         guard let history = node?["history"] as? [[String: Any]], let last = history.last,
               let value = number(last["delay"]), value > 0, value < 60000,

@@ -47,7 +47,7 @@ def generate_project():
     def d(values):
         return '{ ' + ' '.join(key + ' = ' + value + ';' for key, value in values.items()) + ' }'
 
-    source_names = ['SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarCard.swift', 'Host.swift', 'AppFeatures.swift', 'Widget.swift']
+    source_names = ['WidgetSelfRepair.swift', 'MenuCustomization.swift', 'SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarCard.swift', 'Host.swift', 'AppFeatures.swift', 'Widget.swift']
     for name in source_names:
         obj(name, d({'isa': 'PBXFileReference', 'lastKnownFileType': 'sourcecode.swift',
                      'path': q('Sources/' + name), 'sourceTree': q('<group>')}))
@@ -71,7 +71,7 @@ def generate_project():
     obj('app-resources', d({'isa': 'PBXResourcesBuildPhase', 'buildActionMask': '2147483647',
                            'files': arr([ident('icon-build'),ident('license-build'),ident('catalog-app')]), 'runOnlyForDeploymentPostprocessing': '0'}))
 
-    target_sources = [('app', ['SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarCard.swift', 'Host.swift', 'AppFeatures.swift']),
+    target_sources = [('app', ['WidgetSelfRepair.swift', 'MenuCustomization.swift', 'SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarCard.swift', 'Host.swift', 'AppFeatures.swift']),
                       ('widget', ['SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarCard.swift', 'Widget.swift'])]
     for target, files in target_sources:
         is_widget = target == 'widget'
@@ -142,7 +142,7 @@ def generate_project():
     }), encoding='utf-8')
 
     common = {
-        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.0.0',
+        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.0.1',
         'CFBundleVersion': datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
         'CFBundleExecutable': '$(EXECUTABLE_NAME)', 'CFBundleIdentifier': '$(PRODUCT_BUNDLE_IDENTIFIER)',
         'CFBundleName': '$(PRODUCT_NAME)', 'LSMinimumSystemVersion': '14.0',

@@ -281,9 +281,13 @@ final class FlClashMonitor: ObservableObject {
                 // The two-second status poll must not overwrite a fresh probe
                 // (or a timeout) with the core's older history entry.
                 self.updateAutomaticLatency(selection: selection, configuration: config)
+                let connections = try? await self.readEndpoint("connections")
+                guard !Task.isCancelled, self.generation == currentGeneration, self.activeSubscription?.id == profileID else { return }
+                self.snapshot.connectionCount = ConnectionMetrics.count(connections)
                 self.updateConnectionState()
             } catch {
                 guard !Task.isCancelled, self.generation == currentGeneration else { return }
+                self.snapshot.connectionCount = nil
                 self.snapshot.nodeName = nil
                 self.snapshot.groupName = nil
                 self.controllerIssue = (error as? URLError)?.code == .userAuthenticationRequired
@@ -342,7 +346,7 @@ final class FlClashMonitor: ObservableObject {
 
     private func readEndpoint(_ path: String) async throws -> [String: Any] {
         // All callers use these two read-only paths on a fixed loopback origin.
-        guard ["configs", "proxies"].contains(path),
+        guard ["configs", "proxies", "connections"].contains(path),
               let url = URL(string: "http://127.0.0.1:9090/\(path)") else { throw URLError(.badURL) }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -537,6 +541,7 @@ final class FlClashMonitor: ObservableObject {
     }
 
     private func clearLiveValues() {
+        snapshot.connectionCount = nil
         cancelAutomaticLatency()
         clearSpeeds()
         snapshot.nodeName = nil

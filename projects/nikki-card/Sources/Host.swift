@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import ServiceManagement
+import WidgetKit
 
 private final class CardPanel: NSPanel {
     var positionLocked = false
@@ -39,12 +40,15 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let sites = SiteLatencyMonitor()
     private var size = CardSize(rawValue: UserDefaults.standard.string(forKey: "cardSize") ?? "") ?? .medium
     private var menuSite = UserDefaults.standard.string(forKey: "menuLatencySite") ?? "Google"
-    private var cardVisible = true
+    private var cardVisible = !UserDefaults.standard.bool(forKey: "cardHidden")
     private var panel: CardPanel!
     private var host: CardHostingView!
     private var statusItem: NSStatusItem!
     private var lastStatusDisplayKey: String?
     private var observer: Any?
+    private let widgetBroker = NikkiWidgetBroker()
+    private var widgetTimer: Timer?
+    private var widgetLarge = false
     private var settingsWindow: NSWindow?
     private var nodesWindow: NSWindow?
     private var menuSettingsWindow: NSWindow?
@@ -54,6 +58,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var positionLocked = UserDefaults.standard.bool(forKey: "positionLocked")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        WidgetSelfRepair.shared.start()
         if !ProbeSite.all.prefix(6).contains(where: { $0.id == menuSite }) { menuSite = "Google" }
         let size = self.size.dimensions
         panel = CardPanel(contentRect: NSRect(origin: .zero, size: size),
@@ -88,23 +93,47 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self else { return }
             self.host.rootView = self.card()
             self.configureSites()
-            self.updateStatus()
+            self.updateStatus();self.updateWidget()
         }.store(in: &subscriptions)
         createMenu()
+        widgetBroker.start()
+        widgetTimer = Timer.scheduledTimer(withTimeInterval:60,repeats:true) { [weak self] _ in
+            Task { @MainActor in self?.updateWidget();self?.checkWidgetSizes();WidgetCenter.shared.reloadTimelines(ofKind:NikkiWidgetData.kind) }
+        }
+        checkWidgetSizes()
         sites.objectWillChange.receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self else { return }
-            self.host.rootView = self.card(); self.updateStatus()
+            self.host.rootView = self.card(); self.updateStatus();self.updateWidget()
         }.store(in: &subscriptions)
         sites.monitor = monitor
         monitor.start()
         configureSites()
         setSize(self.size)
-        panel.orderFrontRegardless()
+        if cardVisible { panel.orderFrontRegardless() } else { panel.orderOut(nil) }
+        updateVisibilityMark()
         observer = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in Task { @MainActor in self?.refresh() } }
     }
 
+    private func updateWidget() {
+        widgetBroker.value = NikkiWidgetData(snapshot:monitor.snapshot,sites:sites.readings.map { NikkiWidgetSite(name:$0.key,milliseconds:$0.value.milliseconds,status:$0.value.status,checkedAt:$0.value.checkedAt) },generatedAt:monitor.snapshot.sampledAt ?? .distantPast)
+        widgetBroker.start()
+    }
+    private func checkWidgetSizes() {
+        WidgetCenter.shared.getCurrentConfigurations { [weak self] result in
+            Task { @MainActor in
+                guard let self,case .success(let widgets)=result else { return }
+                self.widgetLarge = widgets.contains { $0.kind == NikkiWidgetData.kind && $0.family == .systemLarge }
+                self.configureSites()
+            }
+        }
+    }
+    func application(_ application:NSApplication,open urls:[URL]) {
+        guard let url=urls.first,url.scheme=="nikki" else { return }
+        if url.host=="nodes" { switchClient() } else { showCard() }
+        checkWidgetSizes()
+    }
     private func card() -> NikkiCard {
         NikkiCard(size: size, siteReadings: sites.readings, siteRoute: sites.routeLabel,
                     onSize: { [weak self] in self?.setSize($0) },
@@ -135,6 +164,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         add("切换节点", #selector(switchClient))
         add("连接设置", #selector(showSettings))
         add("菜单栏显示", #selector(showMenuSettings))
+        add("菜单栏文字与图标…", #selector(customizeMenu))
         add("刷新数据", #selector(refresh))
         let sizes = NSMenuItem(title: "卡片尺寸", action: nil, keyEquivalent: "")
         sizes.submenu = NSMenu()
@@ -163,14 +193,19 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(.separator())
         add("退出实时卡片", #selector(quit))
         statusItem.menu = menu
+        updateVisibilityMark()
         updateStatus()
     }
 
     private func updateLevel() {
         panel.level = alwaysOnTop ? .floating : NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
     }
-    @objc private func showCard() { cardVisible = true; configureSites(); panel.orderFrontRegardless() }
-    @objc private func hideCard() { cardVisible = false; configureSites(); panel.orderOut(nil) }
+    @objc private func showCard() { cardVisible = true; UserDefaults.standard.set(false,forKey:"cardHidden"); updateVisibilityMark(); configureSites(); panel.orderFrontRegardless() }
+    @objc private func hideCard() { if !cardVisible { showCard(); return }; cardVisible = false; UserDefaults.standard.set(true,forKey:"cardHidden"); updateVisibilityMark(); configureSites(); panel.orderOut(nil) }
+    private func updateVisibilityMark() {
+        statusItem.menu?.items.first(where: { $0.action == #selector(hideCard) })?.state = cardVisible ? .off : .on
+        statusItem.menu?.items.first(where: { $0.action == #selector(showCard) })?.state = cardVisible ? .on : .off
+    }
     @objc private func centerCard() { panel.center(); showCard() }
     @objc private func openNikki() {
         if let endpoint = try? ConnectionSettings.normalized(monitor.settings.endpoint), let url = URL(string:endpoint + "/ui/") { NSWorkspace.shared.open(url) }
@@ -182,6 +217,26 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             settingsWindow?.contentView = NSHostingView(rootView:ConnectionView(monitor:monitor)); settingsWindow?.center()
         }
         settingsWindow?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
+    }
+    private func customMenuFields()->[MenuField] {
+        let s=monitor.snapshot,reading=sites.readings[menuSite]
+        let palette=MenuBarPalette.load()
+        let remaining=MenuBarDisplay.remaining(used:s.usedBytes,total:s.totalBytes)
+        return [MenuField(id:"site",title:"站点名称",value:menuSite,color:MenuBarPalette.color(palette.name)),
+                MenuField(id:"latency",title:"站点延迟",value:reading?.milliseconds.map { "\($0) ms" } ?? "—",color:MenuBarPalette.color(MenuBarDisplay.isSlow(milliseconds:reading?.milliseconds) ? palette.slow : palette.fast),colorKey:MenuBarDisplay.isSlow(milliseconds:reading?.milliseconds) ? "slow" : "fast"),
+                MenuField(id:"profile",title:"套餐名称",value:s.profileName ?? "—"),
+                MenuField(id:"ring",title:"剩余额度圆环",value:"",color:MenuBarPalette.color(palette.ring),ring:true,progress:remaining),
+                MenuField(id:"quota",title:"剩余额度",value:remaining.map { String(format:"剩 %.0f%%",$0*100) } ?? "剩 —",color:MenuBarPalette.color(palette.ring)),
+                MenuField(id:"node",title:"当前节点",value:s.nodeName ?? "—",defaultVisible:false),
+                MenuField(id:"connections",title:"当前连接数",value:s.isConnected ? s.connectionCount.map { "\($0) 连接" } ?? "—" : "—",defaultVisible:false),
+                MenuField(id:"expiry",title:"到期倒计时",value:SubscriptionCountdown.text(expiry:s.expiresAt),defaultVisible:false),
+                MenuField(id:"download",title:"下载速度",value:MenuBarDisplay.rate(s.downloadBps),color:.cyan,defaultVisible:false),
+                MenuField(id:"upload",title:"上传速度",value:MenuBarDisplay.rate(s.uploadBps),color:.systemPurple,defaultVisible:false)]
+    }
+    @objc private func customizeMenu() {
+        MenuCustomizationPanel.shared.show(title:monitor.snapshot.client.title,fields:customMenuFields(),icon:ProbeSite.icon(menuSite),extraColors:[("fast","常规延迟",MenuCustomization.color("#66FFAD")),("slow","超过 2000 ms",MenuCustomization.color("#FF6EC2"))]) { [weak self] in
+            self?.lastStatusDisplayKey=nil;self?.updateStatus()
+        }
     }
     @objc private func showMenuSettings() {
         if menuSettingsWindow == nil {
@@ -203,7 +258,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc private func refresh() { monitor.refresh(); sites.refresh() }
     private func configureSites() {
-        sites.configure(large: cardVisible && size == .large, menuSite: menuSite, snapshot: monitor.snapshot)
+        sites.configure(large: widgetLarge || (cardVisible && size == .large), menuSite: menuSite, snapshot: monitor.snapshot)
     }
     @objc private func selectSize(_ item: NSMenuItem) {
         if let raw = item.representedObject as? String, let option = CardSize(rawValue: raw) { setSize(option) }
@@ -257,6 +312,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         button.toolTip = "\(snapshot.client.title) · \(profile)\n\(menuSite)：\(reading?.status ?? "待检测") · \(delay)\n套餐剩余 \(progress) · \(sites.routeLabel)\n旁路由策略组测速，每分钟更新"
         button.setAccessibilityLabel(button.toolTip)
+        MenuCustomizationPanel.apply(button,fields:customMenuFields(),icon:ProbeSite.icon(menuSite))
     }
     @objc private func toggleLogin() {
         do {
@@ -296,6 +352,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     func applicationWillTerminate(_ notification: Notification) {
         panel?.saveFrame(usingName: "NikkiLiveCardFrame")
+        widgetTimer?.invalidate();widgetBroker.stop()
         sites.stop()
         monitor.stop()
         if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
