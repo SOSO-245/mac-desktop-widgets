@@ -19,7 +19,10 @@ private final class CardPanel: NSPanel {
             let inHeader = point.y >= size.height - 40 && point.y <= size.height - 12
             let onControl = inHeader && (point.x <= 42 || point.x >= size.width - 89)
             let inSiteList = cardSize == .large && point.y < size.height - 164
-            if NSRect(origin: .zero, size: size).contains(point), !onControl, !inSiteList {
+            let fromTop = size.height - point.y
+            let inSpeeds = point.x >= 14 && point.x <= size.width - 14
+                && (cardSize == .small ? (90...120).contains(fromTop) : (110...152).contains(fromTop))
+            if NSRect(origin: .zero, size: size).contains(point), !onControl, !inSiteList, !inSpeeds {
                 guard !positionLocked else { return }
                 performDrag(with: event)
                 saveFrame(usingName: "NikkiLiveCardFrame")
@@ -131,7 +134,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     func application(_ application:NSApplication,open urls:[URL]) {
         guard let url=urls.first,url.scheme=="nikki" else { return }
-        if url.host=="nodes" { switchClient() } else { showCard() }
+        if url.host=="nodes" { switchClient() } else if url.host=="traffic" { setTrafficScope(monitor.snapshot.trafficScope == .all ? .proxyOnly : .all) } else { showCard() }
         checkWidgetSizes()
     }
     private func card() -> NikkiCard {
@@ -147,7 +150,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     onRefresh: { [weak self] in self?.refresh() },
                     onToggleTop: { [weak self] in self?.toggleTop() },
                     onToggleLock: { [weak self] in self?.toggleLock() },
-                    onQuit: { NSApp.terminate(nil) })
+                    onQuit: { NSApp.terminate(nil) }, onTrafficScope: { [weak self] in self?.setTrafficScope($0) })
     }
 
     private func createMenu() {
@@ -174,6 +177,8 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             item.state = size == option ? .on : .off; sizes.submenu?.addItem(item)
         }
         menu.addItem(sizes)
+        let traffic = NSMenuItem(title: "网速统计", action: nil, keyEquivalent: "")
+        traffic.submenu = NSMenu(); menu.addItem(traffic)
         let latency = NSMenuItem(title: "状态栏延迟站点", action: nil, keyEquivalent: "")
         latency.submenu = NSMenu()
         for site in ProbeSite.all.prefix(6) {
@@ -194,7 +199,25 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         add("退出实时卡片", #selector(quit))
         statusItem.menu = menu
         updateVisibilityMark()
+        updateTrafficMenu()
         updateStatus()
+    }
+
+    private func updateTrafficMenu() {
+        guard let menu = statusItem.menu?.items.first(where: { $0.title == "网速统计" })?.submenu else { return }
+        menu.removeAllItems()
+            for scope in TrafficScope.allCases {
+                let item = NSMenuItem(title: scope.title, action: #selector(selectTrafficScope(_:)), keyEquivalent: "")
+                item.target = self; item.representedObject = scope.rawValue
+                item.state = TrafficScope.load() == scope ? .on : .off; menu.addItem(item)
+            }
+    }
+    @objc private func selectTrafficScope(_ item: NSMenuItem) {
+        guard let raw = item.representedObject as? String, let scope = TrafficScope(rawValue: raw) else { return }
+        setTrafficScope(scope)
+    }
+    private func setTrafficScope(_ scope: TrafficScope) {
+        monitor.setTrafficScope(scope); updateTrafficMenu(); host.rootView = card(); updateStatus(); updateWidget(); WidgetCenter.shared.reloadTimelines(ofKind: NikkiWidgetData.kind)
     }
 
     private func updateLevel() {

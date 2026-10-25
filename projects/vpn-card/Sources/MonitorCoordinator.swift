@@ -35,6 +35,11 @@ final class MonitorCoordinator: ObservableObject {
         shadowrocket.stop()
     }
 
+    func setTrafficScope(_ value: TrafficScope) {
+        guard client == .flclash else { return }
+        flclash.setTrafficScope(value)
+    }
+
     func refresh() {
         if client == .flclash { flclash.refresh() } else { shadowrocket.refresh() }
     }

@@ -2,15 +2,15 @@
 
 六款中文原生 Mac 桌面工具：家庭概览、万年历、Codex 重置、VPN 实时卡片、Nikki 实时卡片、Mac 实时监测。SwiftUI / AppKit / WidgetKit，macOS 14 及以上。
 
-[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r2) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
+[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r3) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
 
 | 项目 | 版本 | 主要功能 | 形式 | 发布架构 |
 | --- | --- | --- | --- | --- |
 | [家庭概览](projects/home-overview) | 2.0.3 | Home Assistant 用电、功率、温湿度曲线、空气质量、NAS、车库/家充；状态栏功率 | 应用＋三尺寸小组件 | Apple Silicon |
 | [万年历](projects/lunar-calendar) | 1.0.1 | 农历、彩色节气/节日、法定调休自动更新、生日、重复日程、自定义菜单栏 | 应用＋三尺寸小组件 | Apple Silicon / Intel |
 | [Codex 重置](projects/codex-resets) | 1.0.7 | 公共重置公告、倒计时、上次重置经过天数和小时、点击来源网站 | 应用＋三尺寸小组件 | Apple Silicon / Intel |
-| [VPN 实时卡片](projects/vpn-card) | 1.1.3 | FlClash / Shadowrocket 节点、套餐、流量曲线、六站点延迟、状态栏 | 可拖动桌面卡片 | Apple Silicon / Intel |
-| [Nikki 实时卡片](projects/nikki-card) | 1.1.0 | 旁路由实时流量、套餐、六站点延迟、策略组/节点切换、自动匹配套餐、连接数、自选菜单栏项目 | 实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
+| [VPN 实时卡片](projects/vpn-card) | 1.1.4 | FlClash / Shadowrocket 节点、套餐、流量曲线、六站点延迟、状态栏 | 可拖动桌面卡片 | Apple Silicon / Intel |
+| [Nikki 实时卡片](projects/nikki-card) | 1.1.1 | 旁路由实时流量、套餐、六站点延迟、策略组/节点切换、自动匹配套餐、连接数、自选菜单栏项目 | 实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
 | [Mac 实时监测](projects/mac-vitals) | 1.0.0 | 系统功率估算、CPU、内存、CPU/GPU 温度、物理网卡网速；每秒更新 | 实时卡片＋三尺寸小组件 | Apple Silicon |
 
 ## 安装
@@ -52,6 +52,10 @@ Mac 实时监测采用 MIT 开源 macmon v0.10.0 采集器，CPU 活跃占比、
 
 应用内自检：启动、唤醒及每 15 分钟检查自身小组件注册，只在发现旧临时副本或安装版本变化时修复。不删除文件、不清空全局缓存、不重启桌面服务、不增加维护启动项；主应用需运行。
 
-## 本次整理
+## 最新更新
 
-[v2026.10.25-r2](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r2) 重新整理六款安装包、当前源码、完整合集与校验文件，补齐操作说明。应用功能与上一版相同，应用版本号保持不变；已有正常安装无需重装。参见 [更新记录](CHANGELOG.md)。
+[v2026.10.25-r3](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r3) 更新 VPN 卡片 1.1.4 与 Nikki 1.1.1：直接点击上传或下载速度，在“仅代理 / 代理＋直连”之间切换；仅代理显示一个绿点，含直连显示绿＋紫两个点。小/中/大号卡片一致，选择自动记住，曲线与菜单栏网速跟随；菜单中也可选择。
+
+含直连仅统计代理核心处理的流量，不包含绕过核心的整机或局域网流量。仅代理按每秒活动连接快照估算，排除直连与拒绝连接，可能遗漏短连接。Shadowrocket 暂仅提供隧道总流量，以灰点标记，不支持拆分。Nikki 系统小组件随快照显示相同范围标记，中/大号速度区可打开应用切换范围并申请刷新；实际刷新仍由系统调度。
+
+其余四款安装包沿用上一版，完整合集包含六款安装包、源码、说明与 SHA256 校验。详见 [更新记录](CHANGELOG.md)。

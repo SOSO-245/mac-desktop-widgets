@@ -88,11 +88,17 @@ struct NikkiWidgetView:View {
                     if !small { Text(fresh ? s.latencyMS.map { "\($0) ms" } ?? "—" : "—").foregroundStyle(mint).fixedSize() }
                 }.font(.system(size:small ? 10 : 11,weight:.semibold)).padding(6).background(.white.opacity(0.06),in:RoundedRectangle(cornerRadius:8))
             }
+            Link(destination: URL(string:"nikki://traffic")!) {
             HStack {
                 speed("↓",s.downloadBps,.cyan)
                 Spacer(minLength:4)
                 speed("↑",s.uploadBps,purple)
+                HStack(spacing:3) {
+                    Circle().fill(mint).frame(width:4,height:4)
+                    if s.trafficScope == .all { Circle().fill(purple).frame(width:4,height:4) }
+                }.fixedSize()
             }
+            }.accessibilityLabel("网速，" + s.trafficLabel + "，点击切换统计范围")
             if family == .systemLarge {
                 Spacer(minLength:3)
                 Divider().overlay(.white.opacity(0.12))

@@ -22,6 +22,8 @@ struct NikkiCard: View {
     let onToggleLock: () -> Void
     let onQuit: () -> Void
 
+    var onTrafficScope: (TrafficScope) -> Void = { _ in }
+
     private let secondary = Color(red: 0.66, green: 0.72, blue: 0.83)
     private let cyan = Color(red: 0.38, green: 0.79, blue: 1)
     private let purple = Color(red: 0.66, green: 0.56, blue: 1)
@@ -123,6 +125,11 @@ struct NikkiCard: View {
                 Button("连接设置", action: onSettings)
                 Button("菜单栏显示", action: onMenuSettings)
                 Button("刷新数据", action: onRefresh)
+                Menu("网速统计") {
+                    ForEach(TrafficScope.allCases, id: \.self) { scope in
+                        Button((snapshot.trafficScope == scope ? "✓ " : "") + scope.title) { onTrafficScope(scope) }
+                    }
+                }
                 Menu("卡片尺寸") {
                     ForEach(CardSize.allCases, id: \.self) { option in
                         Button((size == option ? "✓ " : "") + option.title) { onSize(option) }
@@ -171,13 +178,35 @@ struct NikkiCard: View {
         }.padding(.top, 8).frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var trafficDots: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(Color(red: 0.40, green: 1, blue: 0.68))
+                .frame(width: 4, height: 4)
+            if snapshot.trafficScope == .all {
+                Circle().fill(purple).frame(width: 4, height: 4)
+            }
+        }.fixedSize().accessibilityHidden(true)
+    }
+    private var trafficHelp: String {
+        snapshot.trafficLabel + "。" + snapshot.trafficHint + " 点击速度切换统计范围。"
+    }
+    private func toggleTrafficScope() {
+        onTrafficScope(snapshot.trafficScope == .all ? .proxyOnly : .all)
+    }
+
     private func compactSpeed(_ arrow: String, value: Double?, color: Color) -> some View {
         let display = speed(snapshot.isConnected ? value : nil)
-        return HStack(alignment: .firstTextBaseline, spacing: 3) {
+        return Button(action: toggleTrafficScope) {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            trafficDots
             Text(arrow).foregroundStyle(color).font(.system(size: 12, weight: .bold))
             Text(display.value).font(.system(size: 17, weight: .semibold, design: .rounded))
             Text(display.unit).font(.system(size: 9)).foregroundStyle(secondary)
-        }.monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+        }.monospacedDigit().lineLimit(1).minimumScaleFactor(0.8).contentShape(Rectangle())
+        }.buttonStyle(.plain).help(trafficHelp)
+            .accessibilityLabel((arrow == "↓" ? "下载" : "上传") + "速度，" + snapshot.trafficLabel)
+            .accessibilityValue(display.value + " " + display.unit)
     }
 
     private var sitesContent: some View {
@@ -315,11 +344,13 @@ struct NikkiCard: View {
 
     private func speedColumn(title: String, symbol: String, value: Double?, color: Color, history: [Double]) -> some View {
         let display = speed(snapshot.isConnected ? value : nil)
-        return HStack(spacing: 7) {
+        return Button(action: toggleTrafficScope) {
+        HStack(spacing: 7) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     Image(systemName: symbol).font(.system(size: 9, weight: .bold)).foregroundStyle(color)
                     Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(secondary)
+                    trafficDots
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(display.value)
@@ -341,10 +372,12 @@ struct NikkiCard: View {
                 .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        }.buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title)速度")
+        .accessibilityLabel("\(title)速度，\(snapshot.trafficLabel)")
         .accessibilityValue("\(display.value) \(display.unit)")
-        .help(snapshot.isConnected ? "\(snapshot.client.title) 实时\(title)速度，每秒更新" : snapshot.connectionState)
+        .help(trafficHelp)
     }
 
     private var usageFraction: Double? {

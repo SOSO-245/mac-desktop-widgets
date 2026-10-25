@@ -7,7 +7,27 @@ enum ProxyClient: String, Codable {
     var appPath: String { Bundle.main.bundlePath }
 }
 
+enum TrafficScope: String, CaseIterable, Codable {
+    case all, proxyOnly
+    var title: String { self == .all ? "代理＋直连" : "仅代理" }
+    static func load() -> TrafficScope {
+        TrafficScope(rawValue: UserDefaults.standard.string(forKey: "nikkiTrafficScope") ?? "") ?? .all
+    }
+}
+
 struct MonitorSnapshot: Codable {
+    // Optional storage keeps previous widget cache snapshots decodable.
+    var trafficScopeSelection: TrafficScope?
+    var trafficScope: TrafficScope {
+        get { trafficScopeSelection ?? .all }
+        set { trafficScopeSelection = newValue }
+    }
+    var trafficLabel: String { trafficScope.title }
+    var trafficHint: String {
+        trafficScope == .all ? "Nikki 核心处理的代理与直连流量，不包含绕过核心的流量。"
+            : "按每秒活动连接采样，排除直连与拒绝连接；短连接可能漏计，为近似速率，不是套餐计费用量。"
+    }
+
     var client: ProxyClient = .nikki
     var routeIdentity = ""
     var profileName: String?

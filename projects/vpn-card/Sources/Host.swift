@@ -18,7 +18,10 @@ private final class CardPanel: NSPanel {
             let inHeader = point.y >= size.height - 40 && point.y <= size.height - 12
             let onControl = inHeader && (point.x <= 42 || point.x >= size.width - 89)
             let inSiteList = cardSize == .large && point.y < size.height - 164
-            if NSRect(origin: .zero, size: size).contains(point), !onControl, !inSiteList {
+            let fromTop = size.height - point.y
+            let inSpeeds = point.x >= 14 && point.x <= size.width - 14
+                && (cardSize == .small ? (90...120).contains(fromTop) : (110...152).contains(fromTop))
+            if NSRect(origin: .zero, size: size).contains(point), !onControl, !inSiteList, !inSpeeds {
                 guard !positionLocked else { return }
                 performDrag(with: event)
                 saveFrame(usingName: "FlClashLiveCardFrame")
@@ -114,7 +117,8 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     onRefresh: { [weak self] in self?.refresh() },
                     onToggleTop: { [weak self] in self?.toggleTop() },
                     onToggleLock: { [weak self] in self?.toggleLock() },
-                    onQuit: { NSApp.terminate(nil) }, onMenuSettings:{ [weak self] in self?.showMenuSettings() })
+                    onQuit: { NSApp.terminate(nil) }, onMenuSettings:{ [weak self] in self?.showMenuSettings() },
+                    onTrafficScope: { [weak self] in self?.setTrafficScope($0) })
     }
 
     private func createMenu() {
@@ -140,6 +144,8 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             item.state = size == option ? .on : .off; sizes.submenu?.addItem(item)
         }
         menu.addItem(sizes)
+        let traffic = NSMenuItem(title: "网速统计", action: nil, keyEquivalent: "")
+        traffic.submenu = NSMenu(); menu.addItem(traffic)
         let latency = NSMenuItem(title: "状态栏延迟站点", action: nil, keyEquivalent: "")
         latency.submenu = NSMenu()
         for site in ProbeSite.all.prefix(6) {
@@ -160,7 +166,30 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         add("退出实时卡片", #selector(quit))
         statusItem.menu = menu
         updateVisibilityMark()
+        updateTrafficMenu()
         updateStatus()
+    }
+
+    private func updateTrafficMenu() {
+        guard let menu = statusItem.menu?.items.first(where: { $0.title == "网速统计" })?.submenu else { return }
+        menu.removeAllItems()
+        if monitor.client == .shadowrocket {
+            let item = NSMenuItem(title: "隧道总流量 · 暂不支持拆分", action: nil, keyEquivalent: "")
+            item.isEnabled = false; menu.addItem(item)
+        } else {
+            for scope in TrafficScope.allCases {
+                let item = NSMenuItem(title: scope.title, action: #selector(selectTrafficScope(_:)), keyEquivalent: "")
+                item.target = self; item.representedObject = scope.rawValue
+                item.state = TrafficScope.load() == scope ? .on : .off; menu.addItem(item)
+            }
+        }
+    }
+    @objc private func selectTrafficScope(_ item: NSMenuItem) {
+        guard let raw = item.representedObject as? String, let scope = TrafficScope(rawValue: raw) else { return }
+        setTrafficScope(scope)
+    }
+    private func setTrafficScope(_ scope: TrafficScope) {
+        monitor.setTrafficScope(scope); updateTrafficMenu(); host.rootView = card(); updateStatus()
     }
 
     private func updateLevel() {
@@ -210,6 +239,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc private func switchClient() {
         monitor.switchClient()
+        updateTrafficMenu()
         host.rootView = card()
         openFlClash()
     }
@@ -267,7 +297,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button.imagePosition = .imageOnly
             lastStatusDisplayKey = displayKey
         }
-        button.toolTip = "\(snapshot.client.title) · \(profile)\n\(menuSite)：\(reading?.status ?? "待检测") · \(delay)\n套餐剩余 \(progress) · \(sites.routeLabel)\nHTTPS 首响应，每分钟更新"
+        button.toolTip = "\(snapshot.client.title) · \(profile)\n\(menuSite)：\(reading?.status ?? "待检测") · \(delay)\n套餐剩余 \(progress) · \(sites.routeLabel)\nHTTPS 首响应，每分钟更新\n网速：\(snapshot.trafficLabel)"
         button.setAccessibilityLabel(button.toolTip)
         MenuCustomizationPanel.apply(button,fields:customMenuFields(),icon:ProbeSite.icon(menuSite))
     }

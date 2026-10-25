@@ -33,6 +33,74 @@ struct TrafficSample {
     }
 }
 
+/// Difference each live connection, never difference the sum of a changing list.
+/// Short-lived connections between snapshots cannot be observed by this API.
+struct ProxyTrafficSampler {
+    private struct Counter {
+        let up: Double
+        let down: Double
+        let chains: [String]
+    }
+    private var previous: [String: Counter] = [:]
+    private var previousTime: TimeInterval?
+    private var previousDate: Date?
+
+    mutating func sample(_ data: Data, proxyTypes: [String: String],
+                         time: TimeInterval = ProcessInfo.processInfo.systemUptime,
+                         date: Date = Date()) -> TrafficSample? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let raw = json["connections"],
+              raw is NSNull || raw is [[String: Any]] else { self = Self(); return nil }
+        let rows = raw as? [[String: Any]] ?? []
+        guard rows.count <= 100_000 else { self = Self(); return nil }
+        var current: [String: Counter] = [:]
+        var newStarts: [String: Date] = [:]
+        for row in rows {
+            guard let id = row["id"] as? String, !id.isEmpty, current[id] == nil,
+                  let up = number(row["upload"]), let down = number(row["download"]),
+                  let chains = row["chains"] as? [String], !chains.isEmpty else {
+                self = Self(); return nil
+            }
+            current[id] = Counter(up: up, down: down, chains: chains)
+            if let start = row["start"] as? String { newStarts[id] = Self.parseDate(start) }
+        }
+        defer { previous = current; previousTime = time; previousDate = date }
+        guard let oldTime = previousTime, let oldDate = previousDate,
+              time.isFinite, time > oldTime, time - oldTime <= 5 else { return nil }
+        var up = 0.0, down = 0.0
+        for (id, now) in current {
+            guard Self.isProxy(now.chains, types: proxyTypes) else { continue }
+            if let old = previous[id] {
+                guard now.chains == old.chains else { continue }
+                guard now.up >= old.up, now.down >= old.down else { return nil }
+                up += now.up - old.up; down += now.down - old.down
+            } else if let start = newStarts[id], start >= oldDate, start <= date {
+                // Only include a new connection's total if it began in this interval.
+                up += now.up; down += now.down
+            }
+        }
+        guard up.isFinite, down.isFinite else { return nil }
+        return TrafficSample(uploadBps: up / (time - oldTime), downloadBps: down / (time - oldTime))
+    }
+
+    static func isProxy(_ chains: [String], types: [String: String]) -> Bool {
+        // Mihomo lists the actual outbound first, followed by policy groups.
+        guard let leaf = chains.first, !leaf.isEmpty else { return false }
+        let excluded = ["direct", "reject", "reject-drop", "compatible", "pass"]
+        return !excluded.contains(leaf.lowercased()) && !excluded.contains((types[leaf] ?? "").lowercased())
+    }
+    private func number(_ value: Any?) -> Double? {
+        guard let n = value as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(),
+              n.doubleValue.isFinite, n.doubleValue >= 0 else { return nil }
+        return n.doubleValue
+    }
+    private static func parseDate(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+}
+
 /// Resolve the selected group to the current leaf from the *running* core.
 /// Saved selections alone cannot identify the current node of a URLTest group.
 struct ProxySelection {
@@ -175,6 +243,21 @@ struct ClashLatencyProbe {
 final class FlClashMonitor: ObservableObject {
     @Published var snapshot = MonitorSnapshot()
 
+    private var trafficScope = TrafficScope.load()
+    private var proxySampler = ProxyTrafficSampler()
+    private var proxyTypes: [String: String] = [:]
+
+    func setTrafficScope(_ value: TrafficScope) {
+        guard value != trafficScope else { return }
+        trafficScope = value
+        UserDefaults.standard.set(value.rawValue, forKey: "flclashTrafficScope")
+        disconnectTraffic()
+        snapshot.uploadBps = nil; snapshot.downloadBps = nil; snapshot.sampledAt = nil
+        snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
+        snapshot.trafficScope = value
+        if running { startTraffic() }
+    }
+
     private var pollingTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var refreshID: UUID?
@@ -208,6 +291,7 @@ final class FlClashMonitor: ObservableObject {
     func start() {
         guard !running else { return }
         running = true
+        snapshot.trafficScope = trafficScope
         generation += 1
         pollingTask = Task { [weak self] in
             var tick = 0
@@ -269,6 +353,7 @@ final class FlClashMonitor: ObservableObject {
                 let response = try await self.readEndpoint("proxies")
                 guard !Task.isCancelled, self.generation == currentGeneration,
                       self.activeSubscription?.id == profileID else { return }
+                self.proxyTypes = (response["proxies"] as? [String: [String: Any]] ?? [:]).compactMapValues { $0["type"] as? String }
                 let selection = ProxySelection.resolve(
                     proxies: response["proxies"] as? [String: Any] ?? [:],
                     mode: config["mode"] as? String,
@@ -306,6 +391,8 @@ final class FlClashMonitor: ObservableObject {
             let subscription = ActiveSubscription.decode(configuration: config)
             if activeSubscription?.id != subscription?.id {
                 cancelAutomaticLatency()
+                disconnectTraffic()
+                clearSpeeds()
                 snapshot.nodeName = nil
                 snapshot.groupName = nil
                 snapshot.latencyMS = nil
@@ -453,15 +540,18 @@ final class FlClashMonitor: ObservableObject {
     }
 
     private func startTraffic() {
+        let path = trafficScope == .all ? "traffic" : "connections?interval=1000"
         guard running, controllerEnabled, snapshot.isRunning, trafficTask == nil,
-              let url = URL(string: "ws://127.0.0.1:9090/traffic") else { return }
+              let url = URL(string: "ws://127.0.0.1:9090/\(path)") else { return }
+        let scope = trafficScope
+        proxySampler = ProxyTrafficSampler()
         let currentGeneration = generation
         guard let request = try? FlClashAuthorization.apply(to: URLRequest(url: url), secret: controllerSecret) else {
             controllerIssue = "本机接口认证配置无效"
             return
         }
         let socket = session.webSocketTask(with: request)
-        socket.maximumMessageSize = 16_384
+        socket.maximumMessageSize = scope == .all ? 16_384 : 8_000_000
         webSocket = socket
         socketStartedAt = Date()
         socket.resume()
@@ -486,7 +576,14 @@ final class FlClashMonitor: ObservableObject {
                     case .string(let text): data = Data(text.utf8)
                     @unknown default: continue
                     }
-                    guard let sample = TrafficSample.decode(data) else { continue }
+                    let sample = scope == .all ? TrafficSample.decode(data)
+                        : self.proxySampler.sample(data, proxyTypes: self.proxyTypes)
+                    guard let sample else {
+                        self.snapshot.uploadBps = nil; self.snapshot.downloadBps = nil
+                        self.snapshot.speedHistory = []; self.snapshot.uploadSpeedHistory = []
+                        self.snapshot.sampledAt = nil
+                        continue
+                    }
                     let now = Date()
                     self.lastTrafficAt = now
                     self.snapshot.sampledAt = now
@@ -522,6 +619,7 @@ final class FlClashMonitor: ObservableObject {
     }
 
     private func disconnectTraffic() {
+        proxySampler = ProxyTrafficSampler()
         trafficTask?.cancel()
         trafficTask = nil
         webSocket?.cancel(with: .goingAway, reason: nil)

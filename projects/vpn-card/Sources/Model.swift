@@ -8,6 +8,14 @@ enum ProxyClient: String, CaseIterable {
     var other: ProxyClient { self == .flclash ? .shadowrocket : .flclash }
 }
 
+enum TrafficScope: String, CaseIterable {
+    case all, proxyOnly
+    var title: String { self == .all ? "代理＋直连" : "仅代理" }
+    static func load() -> TrafficScope {
+        TrafficScope(rawValue: UserDefaults.standard.string(forKey: "flclashTrafficScope") ?? "") ?? .all
+    }
+}
+
 struct MonitorSnapshot {
     var client: ProxyClient = .flclash
     var profileName: String?
@@ -21,6 +29,14 @@ struct MonitorSnapshot {
     var latencyMS: Int?
     var latencyIsLive = false
     var latencyKind = "最近测速"
+    var trafficScope: TrafficScope = .all
+    var trafficLabel: String { client == .shadowrocket ? "隧道总流量" : trafficScope.title }
+    var trafficHint: String {
+        if client == .shadowrocket { return "Shadowrocket 仅提供隧道总速率，暂不能拆分代理与直连。" }
+        return trafficScope == .all
+            ? "FlClash 核心处理的代理与直连流量；不含绕过核心的整机流量。"
+            : "按每秒活动连接采样，排除直连与拒绝连接；短连接可能漏计，为近似速率，不是套餐计费用量。"
+    }
     var uploadBps: Double?
     var downloadBps: Double?
     var connectionCount: Int?
