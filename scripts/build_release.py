@@ -4,6 +4,18 @@ import re,argparse,concurrent.futures,hashlib,json,shutil,subprocess,tempfile,zi
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 ARCHIVES={'home-overview':'家庭概览-Mac.zip','lunar-calendar':'万年历-Mac.zip','codex-resets':'Codex重置-Mac.zip','vpn-card':'FlClash实时卡片-Mac.zip','nikki-card':'Nikki实时卡片-Mac.zip','mac-vitals':'Mac实时监测-Mac.zip'}
+def normalize_archive(archive):
+    # ditto emits legacy UTF-8 names without bit 11. zipfile append can rewrite
+    # its central directory as CP437 text; normalize both headers together.
+    normalized=archive.with_suffix('.utf8.zip')
+    with zipfile.ZipFile(archive) as original,zipfile.ZipFile(normalized,'w',zipfile.ZIP_DEFLATED) as target:
+        for info in original.infolist():
+            data=original.read(info)
+            try:info.filename=info.filename.encode('cp437').decode('utf8')
+            except UnicodeError:pass
+            target.writestr(info,data)
+    normalized.replace(archive)
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,required=True);parser.add_argument('--projects',nargs='*',choices=list(ARCHIVES));args=parser.parse_args()
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=True)
@@ -28,6 +40,12 @@ def main():
             z.write(project/'Updater/Sparkle-LICENSE','Sparkle-LICENSE.txt')
             z.write(ROOT/'docs/UPDATES.md','UPDATES.md')
             z.write(ROOT/'THIRD-PARTY-NOTICES.md','THIRD-PARTY-NOTICES.md')
+        normalize_archive(archive)
+        with tempfile.TemporaryDirectory(prefix='widget-release-extract-') as extracted:
+            subprocess.run(['ditto','-x','-k',str(archive),extracted],check=True)
+            installed=list(Path(extracted).glob('*.app'))
+            assert len(installed)==1
+            subprocess.run(['codesign','--verify','--deep','--strict',str(installed[0])],check=True)
         with zipfile.ZipFile(archive) as z:
             assert z.testzip() is None
             for name in z.namelist():

@@ -2,7 +2,7 @@
 
 六款中文原生 Mac 桌面工具：家庭概览、万年历、Codex 重置、VPN 实时卡片、Nikki 实时卡片、Mac 实时监测。SwiftUI / AppKit / WidgetKit，macOS 14 及以上。
 
-[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r5) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
+[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r6) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
 
 | 项目 | 版本 | 主要功能 | 形式 | 发布架构 |
 | --- | --- | --- | --- | --- |
@@ -54,7 +54,7 @@ Mac 实时监测采用 MIT 开源 macmon v0.10.0 采集器，CPU 活跃占比、
 
 ## 最新更新
 
-[v2026.10.25-r5](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r5) 为六款加入每天自动检查、菜单栏更新提示和可选自动安装。首次需安装本版，之后可从“软件更新”操作；详细说明见 [更新机制](docs/UPDATES.md)。
+[v2026.10.25-r6](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r6) 为六款加入每天自动检查、菜单栏更新提示和可选自动安装。首次需安装本版，之后可从“软件更新”操作；详细说明见 [更新机制](docs/UPDATES.md)。
 
 Mac 监测、Nikki、VPN、家庭概览、Codex 重置左键菜单栏显示单张悬浮卡片，点击外部或 Esc 收起；右键保留原设置菜单。Nikki/VPN 重开卡片复用站点测速结果，未到期不重复测速。家庭概览与重置卡片修正边框裁切。
 
