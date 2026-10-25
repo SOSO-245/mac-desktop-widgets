@@ -8,7 +8,7 @@ import SwiftUI
         for client in ProxyClient.allCases {
             for size in CardSize.allCases {
                 var sample = MonitorSnapshot(client: client)
-                sample.profileName = "示例套餐"; sample.usedBytes = 368.5 * 1073741824
+                sample.profileName = "良心云"; sample.usedBytes = 368.5 * 1073741824
                 sample.expiresAt = Date().addingTimeInterval(64 * 86400 + 3600)
                 sample.totalBytes = 1099511627776; sample.subscriptionUpdatedAt = Date()
                 sample.nodeName = "🇺🇸 美国 04 | 流媒体 | 0.1x"; sample.isConnected = true

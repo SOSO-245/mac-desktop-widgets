@@ -41,6 +41,11 @@ struct SiteReading {
     var checkedAt: Date?
     var busy = false
     var reachable: Bool { milliseconds != nil }
+    func needsRefresh(at now:Date = Date()) -> Bool {
+        guard let checkedAt else { return true }
+        let age=now.timeIntervalSince(checkedAt)
+        return age < 0 || age >= 60
+    }
     func refreshing(at now:Date = Date()) -> SiteReading {
         guard let checkedAt, (0...120).contains(now.timeIntervalSince(checkedAt)) else { return SiteReading(busy:true) }
         var value = self; value.busy = true; return value
@@ -70,33 +75,37 @@ final class SiteLatencyMonitor: ObservableObject {
     private var timer: Task<Void,Never>?, round: Task<Void,Never>?
     private var generation = UUID()
     func configure(large: Bool, menuSite: String, snapshot: MonitorSnapshot) {
-        let key = snapshot.routeIdentity + "|\(snapshot.isConnected)|\(large)|\(menuSite)"
+        let key = snapshot.routeIdentity + "|\(snapshot.isConnected)"
+        let scopeChanged = self.large != large || self.menuSite != menuSite
         self.large = large; self.menuSite = menuSite; self.connected = snapshot.isConnected
-        guard key != identity else { return }
-        identity = key; stop(); refresh()
-        timer = Task { [weak self] in
-            while !Task.isCancelled {
-                do { try await Task.sleep(nanoseconds:60_000_000_000) } catch { return }
-                self?.refresh()
+        if key != identity {
+            identity = key; stop(); refresh()
+            timer = Task { [weak self] in
+                while !Task.isCancelled {
+                    do { try await Task.sleep(nanoseconds:2_000_000_000) } catch { return }
+                    self?.refresh(onlyStale:true)
+                }
             }
-        }
+        } else if scopeChanged { refresh(onlyStale:true) }
     }
     func stop() { generation = UUID(); round?.cancel(); timer?.cancel(); round = nil; timer = nil; readings = [:] }
-    func refresh(siteID: String? = nil) {
+    func refresh(siteID: String? = nil, onlyStale: Bool = false) {
         guard round == nil, connected, let monitor, let api = monitor.api else { return }
         let token = generation
         let sites = ProbeSite.all.filter { siteID != nil ? $0.id == siteID : large || $0.id == menuSite }
+            .filter { !onlyStale || readings[$0.id]?.needsRefresh() != false }
+        guard !sites.isEmpty else { return }
         let mapped = ["Google":"Google", "GitHub":"GitHub", "YouTube":"YouTube", "ChatGPT":"AI", "Claude":"AI", "bilibili":"DIRECT"]
         let routes = Dictionary(uniqueKeysWithValues: sites.map { site -> (String,String) in
             let proposed = mapped[site.id] ?? monitor.settings.group
             return (site.id, monitor.proxies[proposed] != nil ? proposed : monitor.settings.group)
         })
         routeLabel = "Nikki · 按同名策略组检测，AI 共用 AI 组，bilibili 直连"
+        for site in sites { readings[site.id] = (readings[site.id] ?? SiteReading()).refreshing() }
         round = Task {
             // Sequential requests avoid router load spikes. No selector is changed.
             for site in sites {
                 guard generation == token, !Task.isCancelled else { return }
-                readings[site.id] = (readings[site.id] ?? SiteReading()).refreshing()
                 do {
                     let value = try await api.json(["proxies",routes[site.id]!,"delay"], query:[URLQueryItem(name:"url",value:site.url), URLQueryItem(name:"timeout",value:"8000")])
                     guard generation == token, !Task.isCancelled else { return }
@@ -110,7 +119,7 @@ final class SiteLatencyMonitor: ObservableObject {
                     readings[site.id] = SiteReading(status:timeout ? "超时" : "检测失败",checkedAt:Date())
                 }
             }
-            if generation == token { round = nil }
+            if generation == token { round = nil; refresh(onlyStale:true) }
         }
     }
 }

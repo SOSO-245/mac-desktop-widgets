@@ -229,6 +229,7 @@ struct MenuCalendar:View {
     let model=CalendarModel()
     var window:NSWindow?
     var status:NSStatusItem?
+    let updateMenu=NSMenu()
     let popover=NSPopover()
     var clock:Timer?
     var midnightClock:Timer?
@@ -242,6 +243,7 @@ struct MenuCalendar:View {
         if let url=Bundle.main.url(forResource:"AppIcon",withExtension:"icns") {NSApp.applicationIconImage=NSImage(contentsOf:url)}
         let menu=NSMenu();let item=NSMenuItem();let appMenu=NSMenu()
         appMenu.addItem(withTitle:"退出万年历",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"q");item.submenu=appMenu;menu.addItem(item);NSApp.mainMenu=menu
+        AppUpdater.shared.addMenu(to:appMenu)
         interactionMonitor=NSEvent.addLocalMonitorForEvents(matching:[.leftMouseDown,.rightMouseDown,.keyDown,.scrollWheel]) {[weak self] event in
             Task {@MainActor in self?.model.recordInteraction()}
             return event
@@ -263,6 +265,11 @@ struct MenuCalendar:View {
         status?.button?.image=MenuIconRenderer.image(model.data.menuIcon)
         status?.button?.imagePosition = .imageOnly
         status?.button?.target=self;status?.button?.action=#selector(toggleCalendar)
+        status?.button?.sendAction(on:[.leftMouseUp,.rightMouseUp])
+        let openItem=NSMenuItem(title:"打开万年历",action:#selector(show),keyEquivalent:"");openItem.target=self;updateMenu.addItem(openItem)
+        let quitItem=NSMenuItem(title:"退出万年历",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"");quitItem.target=NSApp;updateMenu.addItem(quitItem)
+        if let status {AppUpdater.shared.attach(to:status,menu:updateMenu)}
+        AppUpdater.shared.beforeShowingUpdate = { [weak self] in self?.popover.performClose(nil) }
         popover.behavior = .transient
         popover.contentSize=NSSize(width:344,height:414)
         popover.contentViewController=NSHostingController(rootView:MenuCalendar(model:model,openWindow:{[weak self] in self?.popover.performClose(nil);self?.show()}))
@@ -313,6 +320,7 @@ struct MenuCalendar:View {
         if model.followsToday {model.selected=Almanac.clamp(now)}
     }
     @objc func toggleCalendar() {
+        if let event=NSApp.currentEvent,event.type == .rightMouseUp,let button=status?.button {popover.performClose(nil);NSMenu.popUpContextMenu(updateMenu,with:event,for:button);return}
         if popover.isShown {popover.performClose(nil)}
         else if let button=status?.button {
             if model.followsToday {model.selected=Almanac.clamp(Date())}
@@ -324,7 +332,7 @@ struct MenuCalendar:View {
         if let u=urls.first,u.scheme=="lunarcalendar",u.host=="date",let d=Almanac.date(u.lastPathComponent) {model.select(Almanac.key(d))}
         show()
     }
-    func show() {
+    @objc func show() {
         if window==nil {
             let w=NSWindow(contentRect:NSRect(x:0,y:0,width:880,height:600),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
             w.title="万年历";w.titlebarAppearsTransparent=true;w.titleVisibility = .hidden;w.minSize=NSSize(width:800,height:560);w.isReleasedWhenClosed=false

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>FlClash 实时卡片 软件更新</title><link>https://github.com/SOSO-245/mac-desktop-widgets/releases</link><item><title>1.2.0</title><sparkle:version>20261025212121</sparkle:version><sparkle:shortVersionString>1.2.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion><description>新增每天自动检查、更新提示和可选自动安装；保留配置、卡片布局与原登录启动设置。此版本仍未经过 Apple 公证，macOS 可能要求重新确认已有读取权限。</description><enclosure url="https://github.com/SOSO-245/mac-desktop-widgets/releases/download/v2026.10.25-r5/vpn-card-macos.zip" length="3305129" type="application/octet-stream" sparkle:edSignature="dwMQ6SZo3rPy0oOdywf9Z8oAz64fQV2LHT503gvLrE8AC4JLpFmwUrkqpspQDEghaM7PDbruPfcD5DnJ9dsrAw=="></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: QIPk8vx5zYZk6TB3/YZ1bRYdaYEab4QXBLBqspruYPZwtCK5KaRvWbDn7FA8XMH4ji6hNhthMIxRqwcQ+CqhBA==
+length: 1250
+-->

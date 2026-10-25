@@ -20,6 +20,7 @@ final class VitalsPanel:NSPanel {
     var size=UserDefaults.standard.string(forKey:"cardSize") ?? "medium"
     var hidden=UserDefaults.standard.bool(forKey:"cardHidden"),locked=UserDefaults.standard.bool(forKey:"locked"),top=UserDefaults.standard.bool(forKey:"top")
     var snapshot=Metrics()
+    let statusPopover=StatusPopover()
     var dimensions:NSSize{switch size{case "small":return NSSize(width:180,height:180);case "large":return NSSize(width:350,height:450);default:return NSSize(width:350,height:285)}}
     func applicationDidFinishLaunching(_ notification:Notification){
         WidgetSelfRepair.shared.start()
@@ -46,16 +47,23 @@ final class VitalsPanel:NSPanel {
         for (id,title) in [("small","小号"),("medium","中号"),("large","大号")]{let i=NSMenuItem(title:title,action:#selector(selectSize(_:)),keyEquivalent:"");i.target=self;i.representedObject=id;i.state=size==id ? .on:.off;sizes.submenu?.addItem(i)};m.addItem(sizes)
         add(locked ? "解锁位置":"锁定位置",#selector(toggleLock),locked);add("置于其他窗口上方",#selector(toggleTop),top);add("卡片移到屏幕中央",#selector(centerCard))
         m.addItem(.separator());add("菜单栏显示、文字与配色…",#selector(customize));add("登录时启动",#selector(toggleLogin),SMAppService.mainApp.status == .enabled)
-        m.addItem(.separator());add("数据说明…",#selector(about));add("退出 Mac 实时监测",#selector(quit));status.menu=m
+        m.addItem(.separator());add("数据说明…",#selector(about));add("退出 Mac 实时监测",#selector(quit));statusPopover.menu=m
+        if status.button?.target !== statusPopover {
+            statusPopover.attach(to:status,menu:m,size:NSSize(width:350,height:450),openTitle:"显示桌面卡片",
+                open:{[weak self] in self?.showCard()},content:{[weak self] in
+                    guard let self else{return AnyView(EmptyView())}
+                    return AnyView(VitalsCard(data:self.snapshot,size:"large",locked:self.locked,onLock:{[weak self] in self?.toggleLock()},onMenu:{[weak self] in self?.statusPopover.showMenu()}))
+                })
+        }
     }
     func menuWillOpen(_ menu:NSMenu){menu.items.first{$0.action == #selector(hideCard)}?.state=hidden ? .on:.off;menu.items.first{$0.action == #selector(showCard)}?.state=hidden ? .off:.on}
-    func popup(){guard let menu=status.menu else{return};menu.popUp(positioning:nil,at:NSPoint(x:panel.frame.width-50,y:panel.frame.height-35),in:panel.contentView)}
+    func popup(){let menu=statusPopover.menu;menu.popUp(positioning:nil,at:NSPoint(x:panel.frame.width-50,y:panel.frame.height-35),in:panel.contentView)}
     func fields()->[MenuField]{
         let ok=snapshot.fresh();let s=snapshot
         return [MenuField(id:"power",title:s.powerLabel,value:Metrics.value(ok ? s.power:nil," W",decimals:1),color:.systemGreen),MenuField(id:"cpu",title:"CPU 占用",value:"CPU "+Metrics.value(ok ? s.cpu:nil,"%"),color:.white),MenuField(id:"memory",title:"内存占用",value:"内存 "+Metrics.value(ok ? s.memoryPercent:nil,"%"),color:MenuCustomization.color("#B296FF")),MenuField(id:"temp",title:"CPU 温度",value:Metrics.value(ok ? s.cpuTemp:nil," °C",decimals:1),color:.cyan,defaultVisible:false),MenuField(id:"download",title:"下载速度",value:"↓ "+Metrics.rate(ok ? s.download:nil),color:.cyan,defaultVisible:false),MenuField(id:"upload",title:"上传速度",value:"↑ "+Metrics.rate(ok ? s.upload:nil),color:MenuCustomization.color("#B296FF"),defaultVisible:false),MenuField(id:"chip",title:"芯片名称",value:s.chip,defaultVisible:false)]
     }
     var menuIcon:NSImage?{NSImage(systemSymbolName:"desktopcomputer",accessibilityDescription:"Mac 实时监测")?.withSymbolConfiguration(.init(paletteColors:[MenuCustomization.color("#66FFAD")]))}
-    func updateStatus(){guard let b=status.button else{return};let prefs=MenuCustomization.load();if prefs.enabled{MenuCustomizationPanel.apply(b,fields:fields(),icon:menuIcon)}else{let img=prefs.render(fields:fields(),fallback:menuIcon);if b.image?.tiffRepresentation != img.tiffRepresentation{b.image=img};b.title="";b.imagePosition = .imageOnly};b.toolTip="Mac 实时监测 · "+(snapshot.fresh() ? snapshot.powerLabel:"等待采集")}
+    func updateStatus(){statusPopover.update();guard let b=status.button else{return};let prefs=MenuCustomization.load();if prefs.enabled{MenuCustomizationPanel.apply(b,fields:fields(),icon:menuIcon)}else{let img=prefs.render(fields:fields(),fallback:menuIcon);if b.image?.tiffRepresentation != img.tiffRepresentation{b.image=img};b.title="";b.imagePosition = .imageOnly};b.toolTip="Mac 实时监测 · "+(snapshot.fresh() ? snapshot.powerLabel:"等待采集")}
     @objc func customize(){MenuCustomizationPanel.shared.show(title:"Mac 实时监测",fields:fields(),icon:menuIcon){[weak self] in self?.updateStatus()}}
     @objc func showCard(){hidden=false;UserDefaults.standard.set(false,forKey:"cardHidden");host.rootView=card();panel.orderFrontRegardless();makeMenu()}
     @objc func hideCard(){if hidden{showCard();return};hidden=true;UserDefaults.standard.set(true,forKey:"cardHidden");panel.orderOut(nil);makeMenu()}

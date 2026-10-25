@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Mac 实时监测 软件更新</title><link>https://github.com/SOSO-245/mac-desktop-widgets/releases</link><item><title>1.1.0</title><sparkle:version>20261025212124</sparkle:version><sparkle:shortVersionString>1.1.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion><description>新增每天自动检查、更新提示和可选自动安装；保留配置、卡片布局与原登录启动设置。此版本仍未经过 Apple 公证，macOS 可能要求重新确认已有读取权限。</description><enclosure url="https://github.com/SOSO-245/mac-desktop-widgets/releases/download/v2026.10.25-r5/mac-vitals-macos.zip" length="4804305" type="application/octet-stream" sparkle:edSignature="8Ehh4lPBA/kSuaZx1V99CCU3VpC0SZx1QKUqdIX9+6U8LTauxSnJExsg/FEdvVjP4iR+BCbE406BG2ru4zVVDQ=="></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: C77HRh1vaGgr219b345AlbtJsnA3bcNA3YRuNtw9XR7HqJ5gBRDy6lsiluaOjTD2HCJTXZpIKOUEsk0RcdAnCw==
+length: 1248
+-->

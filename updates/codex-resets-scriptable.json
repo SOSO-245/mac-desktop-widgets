@@ -1,0 +1,7 @@
+{
+  "product": "codex-resets-scriptable",
+  "version": "1.1.0",
+  "sha256": "9c4cc1fb6bf1d54d703a6634e7d2a0f9cd5a4d1eb1b37c2e659aa7ea98455749",
+  "url": "https://raw.githubusercontent.com/SOSO-245/mac-desktop-widgets/v2026.10.25-r5/projects/codex-resets/scriptable/CodexResets.js",
+  "notes": "新增手动检查脚本更新，确认后校验下载并保留旧版备份。"
+}

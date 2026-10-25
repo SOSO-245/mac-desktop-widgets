@@ -46,6 +46,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: CardPanel!
     private var host: CardHostingView!
     private var statusItem: NSStatusItem!
+    private let statusPopover = StatusPopover()
     private var lastStatusDisplayKey: String?
     private var observer: Any?
     private var menuSettingsWindow: NSWindow?
@@ -106,8 +107,8 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         ) { [weak self] _ in Task { @MainActor in self?.refresh() } }
     }
 
-    private func card() -> FlClashCard {
-        FlClashCard(size: size, siteReadings: sites.readings, siteRoute: sites.routeLabel,
+    private func card(preview: Bool = false) -> FlClashCard {
+        FlClashCard(size: preview ? .large : size, siteReadings: sites.readings, siteRoute: sites.routeLabel,
                     onSize: { [weak self] in self?.setSize($0) },
                     menuSite: menuSite, onMenuSite: { [weak self] in self?.setMenuSite($0) },
                     onSiteRefresh: { [weak self] in self?.sites.refresh(siteID: $0) },
@@ -164,14 +165,18 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         add("隐藏卡片", #selector(hideCard))
         menu.addItem(.separator())
         add("退出实时卡片", #selector(quit))
-        statusItem.menu = menu
+        statusPopover.attach(to:statusItem,menu:menu,size:CardSize.large.dimensions,openTitle:"显示桌面卡片",
+            open:{ [weak self] in self?.showCard() },content:{ [weak self] in
+                guard let self else{return AnyView(EmptyView())};return AnyView(self.card(preview:true))
+            })
+        statusPopover.visibilityChanged = { [weak self] in self?.configureSites() }
         updateVisibilityMark()
         updateTrafficMenu()
         updateStatus()
     }
 
     private func updateTrafficMenu() {
-        guard let menu = statusItem.menu?.items.first(where: { $0.title == "网速统计" })?.submenu else { return }
+        guard let menu = statusPopover.menu.items.first(where: { $0.title == "网速统计" })?.submenu else { return }
         menu.removeAllItems()
         if monitor.client == .shadowrocket {
             let item = NSMenuItem(title: "隧道总流量 · 暂不支持拆分", action: nil, keyEquivalent: "")
@@ -198,11 +203,12 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func showCard() { cardVisible = true; UserDefaults.standard.set(false,forKey:"cardHidden"); updateVisibilityMark(); configureSites(); panel.orderFrontRegardless() }
     @objc private func hideCard() { if !cardVisible { showCard(); return }; cardVisible = false; UserDefaults.standard.set(true,forKey:"cardHidden"); updateVisibilityMark(); configureSites(); panel.orderOut(nil) }
     private func updateVisibilityMark() {
-        statusItem.menu?.items.first(where: { $0.action == #selector(hideCard) })?.state = cardVisible ? .off : .on
-        statusItem.menu?.items.first(where: { $0.action == #selector(showCard) })?.state = cardVisible ? .on : .off
+        statusPopover.menu.items.first(where: { $0.action == #selector(hideCard) })?.state = cardVisible ? .off : .on
+        statusPopover.menu.items.first(where: { $0.action == #selector(showCard) })?.state = cardVisible ? .on : .off
     }
     @objc private func centerCard() { panel.center(); showCard() }
     @objc private func openFlClash() {
+        statusPopover.close()
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: monitor.client.appPath), configuration: configuration)
@@ -223,11 +229,13 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 MenuField(id:"upload",title:"上传速度",value:MenuBarDisplay.rate(s.uploadBps),color:.systemPurple,defaultVisible:false)]
     }
     @objc private func customizeMenu() {
+        statusPopover.close()
         MenuCustomizationPanel.shared.show(title:monitor.snapshot.client.title,fields:customMenuFields(),icon:ProbeSite.icon(menuSite),extraColors:[("fast","常规延迟",MenuCustomization.color("#66FFAD")),("slow","超过 2000 ms",MenuCustomization.color("#FF6EC2"))]) { [weak self] in
             self?.lastStatusDisplayKey=nil;self?.updateStatus()
         }
     }
     @objc private func showMenuSettings() {
+        statusPopover.close()
         if menuSettingsWindow == nil {
             menuSettingsWindow = NSWindow(contentRect:NSRect(x:0,y:0,width:510,height:580),styleMask:[.titled,.closable],backing:.buffered,defer:false)
             menuSettingsWindow?.title="VPN 卡片 · 菜单栏显示"; menuSettingsWindow?.isReleasedWhenClosed=false
@@ -238,6 +246,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menuSettingsWindow?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
     }
     @objc private func switchClient() {
+        statusPopover.close()
         monitor.switchClient()
         updateTrafficMenu()
         host.rootView = card()
@@ -245,7 +254,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc private func refresh() { monitor.refresh(); sites.refresh() }
     private func configureSites() {
-        sites.configure(large: cardVisible && size == .large, menuSite: menuSite, snapshot: monitor.snapshot)
+        sites.configure(large: statusPopover.isShown || (cardVisible && size == .large), menuSite: menuSite, snapshot: monitor.snapshot)
     }
     @objc private func selectSize(_ item: NSMenuItem) {
         if let raw = item.representedObject as? String, let option = CardSize(rawValue: raw) { setSize(option) }
@@ -262,7 +271,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         host.rootView = card()
         panel.setFrame(frame, display: true)
         panel.saveFrame(usingName: "FlClashLiveCardFrame")
-        statusItem.menu?.items.first(where: { $0.title == "卡片尺寸" })?.submenu?.items.forEach {
+        statusPopover.menu.items.first(where: { $0.title == "卡片尺寸" })?.submenu?.items.forEach {
             $0.state = ($0.representedObject as? String) == size.rawValue ? .on : .off
         }
         configureSites()
@@ -275,12 +284,13 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard ProbeSite.all.contains(where: { $0.id == value }) else { return }
         menuSite = value
         UserDefaults.standard.set(value, forKey: "menuLatencySite")
-        statusItem.menu?.items.first(where: { $0.title == "状态栏延迟站点" })?.submenu?.items.forEach {
+        statusPopover.menu.items.first(where: { $0.title == "状态栏延迟站点" })?.submenu?.items.forEach {
             $0.state = ($0.representedObject as? String) == value ? .on : .off
         }
         configureSites(); updateStatus(); host.rootView = card()
     }
     private func updateStatus() {
+        statusPopover.update()
         guard let button = statusItem?.button else { return }
         let snapshot = monitor.snapshot, reading = sites.readings[menuSite]
         let delay = reading?.milliseconds.map { "\($0) ms" } ?? "—"
@@ -305,7 +315,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         do {
             if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
             else { try SMAppService.mainApp.register() }
-            statusItem.menu?.items.first(where: { $0.action == #selector(toggleLogin) })?.state = SMAppService.mainApp.status == .enabled ? .on : .off
+            statusPopover.menu.items.first(where: { $0.action == #selector(toggleLogin) })?.state = SMAppService.mainApp.status == .enabled ? .on : .off
             if SMAppService.mainApp.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
         } catch {
             let alert = NSAlert(); alert.messageText = "登录启动未设置成功"
@@ -320,7 +330,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.isMovableByWindowBackground = false
         panel.saveFrame(usingName: "FlClashLiveCardFrame")
         host.rootView = card()
-        if let item = statusItem.menu?.items.first(where: { $0.action == #selector(toggleLock) }) {
+        if let item = statusPopover.menu.items.first(where: { $0.action == #selector(toggleLock) }) {
             item.title = positionLocked ? "解锁位置" : "锁定位置"
         }
     }
@@ -328,7 +338,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         alwaysOnTop.toggle()
         UserDefaults.standard.set(alwaysOnTop, forKey: "alwaysOnTop")
         updateLevel(); host.rootView = card()
-        if let item = statusItem.menu?.items.first(where: { $0.action == #selector(toggleTop) }) {
+        if let item = statusPopover.menu.items.first(where: { $0.action == #selector(toggleTop) }) {
             item.title = alwaysOnTop ? "✓ 置于其他窗口上方" : "置于其他窗口上方"
         }
         panel.orderFrontRegardless()

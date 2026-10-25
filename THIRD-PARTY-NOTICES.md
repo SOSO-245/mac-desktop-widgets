@@ -15,3 +15,7 @@
 ## macmon
 
 Mac 实时监测分发并调用未修改的 macmon v0.10.0 官方 Apple Silicon 二进制。项目：https://github.com/vladkens/macmon ，MIT 许可证保存在 projects/mac-vitals/Vendor/LICENSE；固定源提交 5df67a54e082e0b30a0aa2b48b7c7f78a36f1795。官方原始发行 tar.gz SHA256：0ccff60b7bf67bcb9e09cc8f804656a1cafa7eeae7297ee83d10e460ead7d43d。应用打包时仅重新本地签名。
+
+## Sparkle
+
+六款使用 [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0)，保留官方框架签名。许可及其第三方依赖声明在各项目 Updater/Sparkle-LICENSE，发布 ZIP 根目录也包含 Sparkle-LICENSE.txt。归档 SHA256 固定于 updater_build.py。

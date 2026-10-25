@@ -11,7 +11,7 @@ def run(slug):
             'home-overview':[['python3','Tests/run.py'],['zsh','Tests/run-overview-tests.sh'],['python3','-m','unittest','discover','-s','Tests','-p','test_install.py']],
             'codex-resets':[['bash','Tests/run-tests.sh']],
             'vpn-card':[['bash','Tests/run-tests.sh'],['bash','Tests/run-shadowrocket-tests.sh'],['bash','Tests/run-site-tests.sh'],['bash','Tests/run-traffic-tests.sh']],
-            'nikki-card':[['python3','Tests/run.py'],['bash','Tests/run-traffic-tests.sh']],
+            'nikki-card':[['python3','Tests/run.py'],['bash','Tests/run-traffic-tests.sh'],['bash','Tests/run-preview-tests.sh']],
             'lunar-calendar':[['xcrun','swiftc','-parse-as-library','Sources/Model.swift','Sources/SolarTerms.swift','Sources/SharedState.swift','Tests/ModelTests.swift','-o',str(Path(tmp)/'tests')],[str(Path(tmp)/'tests')]],
         }[slug]
         if slug in ['nikki-card','vpn-card']:

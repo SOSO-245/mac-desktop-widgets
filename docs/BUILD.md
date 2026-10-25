@@ -27,3 +27,11 @@ python3 build.py
 Mac 实时监测：18 项采集解析、时效与网卡计数差值检查，以及 9 项菜单栏检查。Vendor 中提供已核对上游发行包的 Apple Silicon 采集器，构建无需 Rust。
 
 网速范围回归：VPN 与 Nikki 各自运行 `bash Tests/run-traffic-tests.sh`，验证实际出站分类、连接新增/消失、计数重置、时间回退、无效包及缓存兼容；已纳入 `scripts/test_all.py`。
+
+## 更新组件
+
+首次构建会下载固定 Sparkle 2.10.0，核对 SHA256 后缓存；需要连接 GitHub。每款 Updater/config.json 只包含公开地址与公钥。发布过程见 [UPDATES](UPDATES.md)。
+
+手机测试：在 projects/codex-resets/scriptable 运行 `node Tests/run-tests.js` 和 `node Tests/update-tests.js`。
+
+真实更新隔离测试：`python3 shared/updater/Tests/run-integration.py`。创建独立测试钥匙串账号和临时应用，仅监听回环地址；分别验证成功替换、坏包拒绝、坏清单拒绝。不会给真实六款应用安装测试版本。

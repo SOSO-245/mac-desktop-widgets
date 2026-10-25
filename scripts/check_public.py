@@ -8,6 +8,8 @@ PATTERNS={
     'github-token':rb'(?:ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})',
     'jwt':rb'eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}',
     'personal-path':rb'/Users/[A-Za-z0-9_.-]+/',
+    'private-network':rb'192\.168\.50\.',
+    'private-alias':rb'big[_]max[_]',
     'device-id':rb'(?:iot_cn_|miaomiaoc_cn_|zhimi_cn_)[A-Za-z0-9_]{8,}',
 }
 def main():

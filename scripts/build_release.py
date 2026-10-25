@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Build public apps in a clean temporary tree; never install or launch them."""
-import argparse,concurrent.futures,hashlib,json,shutil,subprocess,tempfile,zipfile
+import re,argparse,concurrent.futures,hashlib,json,shutil,subprocess,tempfile,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 ARCHIVES={'home-overview':'家庭概览-Mac.zip','lunar-calendar':'万年历-Mac.zip','codex-resets':'Codex重置-Mac.zip','vpn-card':'FlClash实时卡片-Mac.zip','nikki-card':'Nikki实时卡片-Mac.zip','mac-vitals':'Mac实时监测-Mac.zip'}
@@ -25,17 +25,19 @@ def main():
         archive=project/'交付'/ARCHIVES[slug]
         with zipfile.ZipFile(archive,'a',zipfile.ZIP_DEFLATED) as z:
             z.write(ROOT/'LICENSE','LICENSE.txt')
+            z.write(project/'Updater/Sparkle-LICENSE','Sparkle-LICENSE.txt')
+            z.write(ROOT/'docs/UPDATES.md','UPDATES.md')
             z.write(ROOT/'THIRD-PARTY-NOTICES.md','THIRD-PARTY-NOTICES.md')
         with zipfile.ZipFile(archive) as z:
             assert z.testzip() is None
             for name in z.namelist():
                 data=z.read(name)
                 # No developer home paths, device IDs, actual household network or known private alias.
-                for marker in [b'/Users/',b'iot_cn_',b'miaomiaoc_cn_',b'zhimi_cn_',b'192.168.50.',b'big_max_']:
+                for marker in [b'/Users/',b'iot_cn_',b'miaomiaoc_cn_',b'zhimi_cn_',rb'192[.]168[.]50[.]',rb'big[_]max[_]']:
                     if slug=='mac-vitals' and name.endswith('/Resources/macmon') and marker==b'/Users/':
                         assert ('/Users/'+Path.home().name+'/').encode() not in data, 'local path in collector'
                         continue # pinned upstream binary embeds upstream build paths
-                    assert marker not in data, 'private marker in '+slug+':'+name
+                    assert re.search(marker,data) is None, 'private marker in '+slug+':'+name
         shutil.copy2(archive,output/(slug+'-macos.zip'))
         return {'project':slug,'archive':slug+'-macos.zip','sha256':hashlib.sha256(archive.read_bytes()).hexdigest()}
     rows=[]

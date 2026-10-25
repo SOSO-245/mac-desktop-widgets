@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 import zipfile
 
+import updater_build
+
 ROOT = Path(__file__).resolve().parent
 NAME = 'Mac 实时监测'
 BUNDLE = 'local.homeatlas.MacVitals'
@@ -30,7 +32,7 @@ def main():
     info = dict(CFBundleDevelopmentRegion='zh_CN', CFBundleName=NAME,
                 CFBundleDisplayName=NAME, CFBundleExecutable='MacVitals',
                 CFBundleIdentifier=BUNDLE, CFBundlePackageType='APPL',
-                CFBundleShortVersionString='1.0.0',
+                CFBundleShortVersionString='1.1.0',
                 CFBundleVersion=datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
                 LSMinimumSystemVersion='14.0', LSUIElement=True,
                 NSHighResolutionCapable=True, NSPrincipalClass='NSApplication',
@@ -51,12 +53,13 @@ def main():
         binary = stage / ('MacVitals-' + arch)
         run('xcrun', 'swiftc', '-swift-version', '5', '-O', '-parse-as-library',
             '-target', arch + '-apple-macosx14.0', '-sdk', sdk,
-            *sources, '-o', binary)
+            *sources, *updater_build.compile_flags(ROOT), '-o', binary)
         binaries.append(binary)
     run('lipo', '-create', *binaries, '-output', macos / 'MacVitals')
     run('python3', ROOT / 'Widget/build_widget.py', app)
     run('xattr', '-cr', app)
     run('codesign', '--force', '--sign', '-', app)
+    updater_build.finish(ROOT, app)
     run('codesign', '--verify', '--deep', '--strict', app)
     output = app
     if args.install:
@@ -75,13 +78,13 @@ def main():
     sha = hashlib.sha256(archive.read_bytes()).hexdigest()
     source_archive = delivery / 'Mac实时监测-源码.zip'
     with zipfile.ZipFile(source_archive, 'w', compression=zipfile.ZIP_DEFLATED) as package:
-        for folder in ('Sources', 'Tests', 'Assets', 'Widget'):
+        for folder in ('Sources', 'Tests', 'Updater', 'Assets', 'Widget'):
             for file in sorted((ROOT / folder).rglob('*')):
                 if file.is_file():
                     package.write(file, Path(ROOT.name) / file.relative_to(ROOT))
         for file in (ROOT/'Vendor/macmon', ROOT/'Vendor/LICENSE'):
             package.write(file, Path(ROOT.name)/file.relative_to(ROOT))
-        for name in ('项目说明.md', '注意要点.md', 'build.py'):
+        for name in ('项目说明.md', '注意要点.md', 'build.py', 'updater_build.py'):
             package.write(ROOT / name, Path(ROOT.name) / name)
     source_sha = hashlib.sha256(source_archive.read_bytes()).hexdigest()
     (delivery / 'SHA256SUMS').write_text(sha + '  ' + archive.name + '\n' +

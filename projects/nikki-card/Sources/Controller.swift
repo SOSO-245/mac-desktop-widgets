@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 struct ConnectionSettings: Codable, Equatable {
-    var endpoint = "http://router.local:9090"
+    var endpoint = "http://192.168.1.2:9090"
     var group = "节点选择"
     var provider = ""
     static func load() -> Self {

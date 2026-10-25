@@ -41,6 +41,11 @@ struct SiteReading {
     var checkedAt: Date?
     var busy = false
     var reachable: Bool { httpCode.map { (200..<400).contains($0) } ?? false }
+    func needsRefresh(at now:Date = Date()) -> Bool {
+        guard let checkedAt else { return true }
+        let age=now.timeIntervalSince(checkedAt)
+        return age < 0 || age >= 60
+    }
     func refreshing(at now:Date = Date()) -> SiteReading {
         guard let checkedAt, (0...120).contains(now.timeIntervalSince(checkedAt)) else { return SiteReading(busy:true) }
         var value = self; value.busy = true; return value
@@ -152,7 +157,7 @@ final class SiteLatencyMonitor: ObservableObject {
         self.large = large; self.menuSite = menuSite
         self.snapshot = snapshot
         let identity = "\(snapshot.client.rawValue)|\(snapshot.isConnected)|\(snapshot.profileName ?? "")|\(snapshot.nodeName ?? "")"
-        if scopeChanged || self.enabled != enabled || self.identity != identity {
+        if self.enabled != enabled || self.identity != identity {
             self.enabled = enabled; self.identity = identity
             reset()
             refresh()
@@ -163,10 +168,10 @@ final class SiteLatencyMonitor: ObservableObject {
                     // A disconnected or replaced SR tunnel must not keep old values.
                     if self.snapshot.client == .shadowrocket, let route = self.route, SiteRoute.shadowrocket() != route {
                         self.reset(keepTimer: true); self.refresh()
-                    } else if self.lastAttempt.map({ Date().timeIntervalSince($0) >= 60 }) ?? true { self.refresh() }
+                    } else { self.refresh(onlyStale:true) }
                 }
             }
-        }
+        } else if scopeChanged { refresh(onlyStale:true) }
     }
 
     func stop() { enabled = false; reset() }
@@ -175,8 +180,9 @@ final class SiteLatencyMonitor: ObservableObject {
         if !keepTimer { timer?.cancel(); timer = nil }
         readings = [:]; route = nil; lastAttempt = nil; refreshRequested = []
     }
-    func refresh(siteID: String? = nil) {
+    func refresh(siteID: String? = nil, onlyStale: Bool = false) {
         guard enabled else { return }
+        if onlyStale, route == nil, let lastAttempt, (0..<60).contains(Date().timeIntervalSince(lastAttempt)) { return }
         // Do not cancel every other row when one refresh button is pressed.
         if round != nil {
             if let siteID { refreshRequested.insert(siteID) }
@@ -184,7 +190,8 @@ final class SiteLatencyMonitor: ObservableObject {
         }
         guard snapshot.isConnected else { routeLabel = "\(snapshot.client.title) 未连接"; lastAttempt = Date(); return }
         let token = generation, client = snapshot.client
-        let sites = siteID.map { id in ProbeSite.all.filter { $0.id == id } } ?? (large ? ProbeSite.all : ProbeSite.all.filter { $0.id == menuSite })
+        let selected = siteID.map { id in ProbeSite.all.filter { $0.id == id } } ?? (large ? ProbeSite.all : ProbeSite.all.filter { $0.id == menuSite })
+        let sites = selected.filter { !onlyStale || readings[$0.id]?.needsRefresh() != false }
         guard !sites.isEmpty else { return }
         lastAttempt = Date()
         round = Task { [weak self] in
@@ -221,7 +228,7 @@ final class SiteLatencyMonitor: ObservableObject {
             self.round = nil
             if let pending = self.refreshRequested.sorted().first {
                 self.refreshRequested.remove(pending); self.refresh(siteID: pending)
-            }
+            } else { self.refresh(onlyStale:true) }
         }
     }
 

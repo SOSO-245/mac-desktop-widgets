@@ -2,16 +2,16 @@
 
 六款中文原生 Mac 桌面工具：家庭概览、万年历、Codex 重置、VPN 实时卡片、Nikki 实时卡片、Mac 实时监测。SwiftUI / AppKit / WidgetKit，macOS 14 及以上。
 
-[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r4) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
+[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r5) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
 
 | 项目 | 版本 | 主要功能 | 形式 | 发布架构 |
 | --- | --- | --- | --- | --- |
-| [家庭概览](projects/home-overview) | 2.0.4 | Home Assistant 用电、功率、温湿度曲线、空气质量、NAS、车库/家充；状态栏功率 | 应用＋三尺寸小组件 | Apple Silicon |
-| [万年历](projects/lunar-calendar) | 1.0.2 | 农历、彩色节气/节日、法定调休自动更新、生日、重复日程、自定义菜单栏 | 应用＋三尺寸小组件 | Apple Silicon / Intel |
-| [Codex 重置](projects/codex-resets) | 1.0.8 | 公共重置公告、倒计时、上次重置经过天数和小时、点击来源网站 | 应用＋三尺寸小组件 | Apple Silicon / Intel |
-| [VPN 实时卡片](projects/vpn-card) | 1.1.4 | FlClash / Shadowrocket 节点、套餐、流量曲线、六站点延迟、状态栏 | 可拖动桌面卡片 | Apple Silicon / Intel |
-| [Nikki 实时卡片](projects/nikki-card) | 1.1.1 | 旁路由实时流量、套餐、六站点延迟、策略组/节点切换、自动匹配套餐、连接数、自选菜单栏项目 | 实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
-| [Mac 实时监测](projects/mac-vitals) | 1.0.0 | 系统功率估算、CPU、内存、CPU/GPU 温度、物理网卡网速；每秒更新 | 实时卡片＋三尺寸小组件 | Apple Silicon |
+| [家庭概览](projects/home-overview) | 2.1.0 | Home Assistant 用电、功率、温湿度曲线、空气质量、NAS、车库/家充；状态栏功率 | 应用＋三尺寸小组件 | Apple Silicon |
+| [万年历](projects/lunar-calendar) | 1.1.0 | 农历、彩色节气/节日、法定调休自动更新、生日、重复日程、自定义菜单栏 | 应用＋三尺寸小组件 | Apple Silicon / Intel |
+| [Codex 重置](projects/codex-resets) | 1.1.0 | 公共重置公告、倒计时、上次重置经过天数和小时、点击来源网站 | 应用＋三尺寸小组件 | Apple Silicon / Intel |
+| [VPN 实时卡片](projects/vpn-card) | 1.2.0 | FlClash / Shadowrocket 节点、套餐、流量曲线、六站点延迟、状态栏 | 可拖动桌面卡片 | Apple Silicon / Intel |
+| [Nikki 实时卡片](projects/nikki-card) | 1.2.0 | 旁路由实时流量、套餐、六站点延迟、策略组/节点切换、自动匹配套餐、连接数、自选菜单栏项目 | 实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
+| [Mac 实时监测](projects/mac-vitals) | 1.1.0 | 系统功率估算、CPU、内存、CPU/GPU 温度、物理网卡网速；每秒更新 | 实时卡片＋三尺寸小组件 | Apple Silicon |
 
 ## 安装
 
@@ -54,6 +54,8 @@ Mac 实时监测采用 MIT 开源 macmon v0.10.0 采集器，CPU 活跃占比、
 
 ## 最新更新
 
-[v2026.10.25-r4](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r4) 将家庭概览 2.0.4、万年历 1.0.2、Codex 重置 1.0.8 改为后台应用，打开窗口也不占用 Dock。六款工具均保留菜单栏、桌面卡片及各自的小组件入口。曾手动固定的 Dock 图标需自行取消“在程序坞中保留”；应用不会修改系统 Dock 布局。
+[v2026.10.25-r5](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r5) 为六款加入每天自动检查、菜单栏更新提示和可选自动安装。首次需安装本版，之后可从“软件更新”操作；详细说明见 [更新机制](docs/UPDATES.md)。
 
-VPN 卡片、Nikki、Mac 实时监测沿用 r3 安装包；保留点击网速切换“仅代理 / 代理＋直连”和单双圆点标记。完整合集含六款安装包、源码、说明与 SHA256 校验。详见 [更新记录](CHANGELOG.md)。
+Mac 监测、Nikki、VPN、家庭概览、Codex 重置左键菜单栏显示单张悬浮卡片，点击外部或 Esc 收起；右键保留原设置菜单。Nikki/VPN 重开卡片复用站点测速结果，未到期不重复测速。家庭概览与重置卡片修正边框裁切。
+
+新增 [iPhone/iPad Scriptable 重置组件](projects/codex-resets/scriptable)，支持手动确认更新、文件校验与备份。所有六款 Mac ZIP 均从脱敏公开源码重新构建，安装前后保留本机私人配置。完整记录见 [CHANGELOG](CHANGELOG.md)。

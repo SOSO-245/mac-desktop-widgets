@@ -13,6 +13,8 @@ import plistlib
 import subprocess
 import tempfile
 
+import updater_build
+
 ROOT = pathlib.Path(__file__).resolve().parent
 PROJECT = ROOT / 'CodexResets.xcodeproj'
 APP_NAME = 'Codex 重置'
@@ -46,7 +48,7 @@ def generate_project():
     def d(values):
         return '{ ' + ' '.join(key + ' = ' + value + ';' for key, value in values.items()) + ' }'
 
-    source_names = ['WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift', 'Widget.swift']
+    source_names = ['AppUpdater.swift', 'StatusPopover.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift', 'Widget.swift']
     for name in source_names:
         obj(name, d({'isa': 'PBXFileReference', 'lastKnownFileType': 'sourcecode.swift',
                      'path': q('Sources/' + name), 'sourceTree': q('<group>')}))
@@ -64,7 +66,7 @@ def generate_project():
     obj('app-resources', d({'isa': 'PBXResourcesBuildPhase', 'buildActionMask': '2147483647',
                            'files': arr([ident('icon-build')]), 'runOnlyForDeploymentPostprocessing': '0'}))
 
-    target_sources = [('app', ['WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift']),
+    target_sources = [('app', ['AppUpdater.swift', 'StatusPopover.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift']),
                       ('widget', ['Model.swift', 'ResetCard.swift', 'Widget.swift'])]
     for target, files in target_sources:
         is_widget = target == 'widget'
@@ -87,6 +89,8 @@ def generate_project():
             'SWIFT_EMIT_LOC_STRINGS': 'YES', 'ALWAYS_SEARCH_USER_PATHS': 'NO',
             'SKIP_INSTALL': 'YES' if is_widget else 'NO',
         }
+        if not is_widget:
+            settings.update(updater_build.xcode_settings(ROOT, q))
         if is_widget:
             settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
         configs = [obj(target + '-' + config, d({'isa': 'XCBuildConfiguration', 'buildSettings': d(settings), 'name': config}))
@@ -131,7 +135,7 @@ def generate_project():
     }), encoding='utf-8')
 
     common = {
-        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.0.8',
+        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.1.0',
         'CFBundleVersion': datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
         'CFBundleExecutable': '$(EXECUTABLE_NAME)', 'CFBundleIdentifier': '$(PRODUCT_BUNDLE_IDENTIFIER)',
         'CFBundleName': '$(PRODUCT_NAME)', 'LSMinimumSystemVersion': '14.0',
@@ -187,6 +191,7 @@ def main():
     run(['xcodebuild', '-project', PROJECT, '-target', APP_TARGET, '-configuration', 'Release',
          'SYMROOT=' + str(build), 'CODE_SIGN_IDENTITY=-', '-quiet'], cwd=ROOT)
     source = build / 'Release' / (APP_NAME + '.app')
+    updater_build.finish(ROOT, source)
     run(['codesign', '--verify', '--deep', '--strict', source])
     output = source
     if arguments.install:

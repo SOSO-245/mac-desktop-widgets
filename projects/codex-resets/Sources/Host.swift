@@ -128,6 +128,7 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
     private var managerWindow: NSWindow?
     private let store = ResetViewModel()
     private var statusItem: NSStatusItem?
+    private let statusPopover=StatusPopover()
     private var displayTimer: Timer?
     private var maintenanceTimer: Timer?
     private var maintenanceTask: Task<Void, Never>?
@@ -208,6 +209,7 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showManager() {
+        statusPopover.close()
         if managerWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 824, height: 720),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -240,10 +242,18 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(withTitle:"退出 Codex 重置",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"")
-        item.menu = menu; statusItem = item
+        statusItem = item
+        statusPopover.attach(to:item,menu:menu,size:NSSize(width:344,height:344),openTitle:"管理与预览",
+            open:{[weak self] in self?.showManager()},content:{[weak self] in
+                guard let self else{return AnyView(EmptyView())}
+                return AnyView(ResetCard(snapshot:self.store.snapshot,size:.large,now:Date(),
+                    refresh:AnyView(Button(action:{[weak self] in self?.refreshStatus()}){Image(systemName:"arrow.clockwise")}.buttonStyle(.plain)))
+                    .background(ResetBackground()).clipShape(RoundedRectangle(cornerRadius:23)).containerShape(RoundedRectangle(cornerRadius:23,style:.continuous)).environment(\.colorScheme,.dark))
+            })
         updateStatusItem()
     }
     private func updateStatusItem() {
+        statusPopover.update()
         guard let button = statusItem?.button else { return }
         let display = ResetMenuDisplay.make(snapshot:store.snapshot,now:Date())
         let color:NSColor
@@ -274,9 +284,11 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
                 MenuField(id:"clock",title:"当前时间",value:Date().formatted(date:.omitted,time:.shortened),defaultVisible:false)]
     }
     @objc private func customizeMenu() {
+        statusPopover.close()
         MenuCustomizationPanel.shared.show(title:"Codex 重置",fields:customMenuFields(),icon:NSImage(systemSymbolName:"clock.arrow.circlepath",accessibilityDescription:nil),extraColors:[("elapsed","无计划：经过时间",MenuCustomization.color("#66FFAD")),("planned","有计划：倒计时",MenuCustomization.color("#FF6EC2")),("neutral","未知 / 缓存状态",.white)]) { [weak self] in self?.updateStatusItem() }
     }
-    @objc private func openWebsite() { NSWorkspace.shared.open(resetsWebsite) }
+    @objc private func openWebsite() {
+        statusPopover.close(); NSWorkspace.shared.open(resetsWebsite) }
     @objc private func refreshStatus() {
         Task { await store.refresh(force:true); updateStatusItem() }
     }
