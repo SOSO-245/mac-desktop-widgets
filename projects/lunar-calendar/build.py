@@ -142,13 +142,13 @@ def generate_project():
     }), encoding='utf-8')
 
     common = {
-        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.0.1',
+        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.0.2',
         'CFBundleVersion': datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
         'CFBundleExecutable': '$(EXECUTABLE_NAME)', 'CFBundleIdentifier': '$(PRODUCT_BUNDLE_IDENTIFIER)',
         'CFBundleName': '$(PRODUCT_NAME)', 'LSMinimumSystemVersion': '14.0',
     }
     app = dict(common, CFBundlePackageType='APPL', CFBundleDisplayName=APP_NAME,
-               CFBundleIconFile='AppIcon', NSPrincipalClass='NSApplication', NSCalendarsWriteOnlyAccessUsageDescription='将你在万年历填写的日程添加到系统默认日历，不读取其他日程。', NSContactsUsageDescription='将你选定的公历或农历生日写入指定联系人，已有生日会先请你确认替换。',
+               CFBundleIconFile='AppIcon', LSUIElement=True, NSPrincipalClass='NSApplication', NSCalendarsWriteOnlyAccessUsageDescription='将你在万年历填写的日程添加到系统默认日历，不读取其他日程。', NSContactsUsageDescription='将你选定的公历或农历生日写入指定联系人，已有生日会先请你确认替换。',
                CFBundleURLTypes=[{'CFBundleURLName': BUNDLE_ID + '.navigation',
                                   'CFBundleURLSchemes': ['lunarcalendar']}])
     widget = dict(common, CFBundlePackageType='XPC!', CFBundleDisplayName=APP_NAME,

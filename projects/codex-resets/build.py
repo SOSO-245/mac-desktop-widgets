@@ -131,13 +131,13 @@ def generate_project():
     }), encoding='utf-8')
 
     common = {
-        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.0.7',
+        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.0.8',
         'CFBundleVersion': datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
         'CFBundleExecutable': '$(EXECUTABLE_NAME)', 'CFBundleIdentifier': '$(PRODUCT_BUNDLE_IDENTIFIER)',
         'CFBundleName': '$(PRODUCT_NAME)', 'LSMinimumSystemVersion': '14.0',
     }
     app = dict(common, CFBundlePackageType='APPL', CFBundleDisplayName=APP_NAME,
-               CFBundleIconFile='AppIcon', NSPrincipalClass='NSApplication',
+               CFBundleIconFile='AppIcon', LSUIElement=True, NSPrincipalClass='NSApplication',
                CFBundleURLTypes=[{'CFBundleURLName': BUNDLE_ID + '.navigation',
                                   'CFBundleURLSchemes': ['codexresets']}])
     widget = dict(common, CFBundlePackageType='XPC!', CFBundleDisplayName=APP_NAME,

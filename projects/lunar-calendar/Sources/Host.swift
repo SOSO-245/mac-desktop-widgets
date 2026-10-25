@@ -351,7 +351,7 @@ struct MenuCalendar:View {
             if let tiff=proof.nsImage?.tiffRepresentation,let png=NSBitmapImageRep(data:tiff)?.representation(using:.png,properties:[:]) {try png.write(to:dir.appendingPathComponent("menu-alignment.png"))}
             return
         }
-        let delegate=CalendarDelegate();app.delegate=delegate;app.setActivationPolicy(.regular);app.run()
+        let delegate=CalendarDelegate();app.delegate=delegate;app.setActivationPolicy(.accessory);app.run()
         withExtendedLifetime(delegate) {}
     }
 }
