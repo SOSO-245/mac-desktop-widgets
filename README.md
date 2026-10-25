@@ -2,7 +2,7 @@
 
 六款中文原生 Mac 桌面工具：家庭概览、万年历、Codex 重置、VPN 实时卡片、Nikki 实时卡片、Mac 实时监测。SwiftUI / AppKit / WidgetKit，macOS 14 及以上。
 
-[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
+[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r2) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
 
 | 项目 | 版本 | 主要功能 | 形式 | 发布架构 |
 | --- | --- | --- | --- | --- |
@@ -11,7 +11,6 @@
 | [Codex 重置](projects/codex-resets) | 1.0.7 | 公共重置公告、倒计时、上次重置经过天数和小时、点击来源网站 | 应用＋三尺寸小组件 | Apple Silicon / Intel |
 | [VPN 实时卡片](projects/vpn-card) | 1.1.3 | FlClash / Shadowrocket 节点、套餐、流量曲线、六站点延迟、状态栏 | 可拖动桌面卡片 | Apple Silicon / Intel |
 | [Nikki 实时卡片](projects/nikki-card) | 1.1.0 | 旁路由实时流量、套餐、六站点延迟、策略组/节点切换、自动匹配套餐、连接数、自选菜单栏项目 | 实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
-
 | [Mac 实时监测](projects/mac-vitals) | 1.0.0 | 系统功率估算、CPU、内存、CPU/GPU 温度、物理网卡网速；每秒更新 | 实时卡片＋三尺寸小组件 | Apple Silicon |
 
 ## 安装
@@ -23,7 +22,7 @@
 
 ## 使用特点
 
-- 蓝紫玻璃配色；实时卡片大号展示六站点，两行三列。
+- 蓝紫玻璃配色；VPN / Nikki 大号卡片展示六站点，两行三列；电脑监测大号显示功率曲线及额外硬件数据。
 - 家庭概览的菜单栏功率为荧光绿，超过 1000 W 粉红，超过 3000 W 亮紫。
 - Codex 重置有明确计划时显示粉红倒计时，无计划时显示荧光绿的上次重置经过天数和小时。数据来自社区站点，**不是个人账号额度，也不是 OpenAI 官方工具**。
 - 万年历桌面组件停止点选 30 秒后返回今日，主窗口/菜单栏为 60 秒；实际 WidgetKit 显示由系统调度。节假日每天北京时间零点尝试更新，启动/唤醒补查。
@@ -52,3 +51,7 @@ Nikki 在“编辑小组件”里搜索“Nikki 实时卡片”。小/中/大号
 Mac 实时监测采用 MIT 开源 macmon v0.10.0 采集器，CPU 活跃占比、内存、功率和温度已在 Apple M4 核验。系统功率为 SMC 估算，不是插座实测，不包含外接显示器；没有传感器时显示芯片功率。卡片每秒更新；小组件每分钟请求，系统可能延后。仅绑定本机只读端口 18766；不上传数据。
 
 应用内自检：启动、唤醒及每 15 分钟检查自身小组件注册，只在发现旧临时副本或安装版本变化时修复。不删除文件、不清空全局缓存、不重启桌面服务、不增加维护启动项；主应用需运行。
+
+## 本次整理
+
+[v2026.10.25-r2](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.25-r2) 重新整理六款安装包、当前源码、完整合集与校验文件，补齐操作说明。应用功能与上一版相同，应用版本号保持不变；已有正常安装无需重装。参见 [更新记录](CHANGELOG.md)。
