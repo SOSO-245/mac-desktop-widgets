@@ -1,4 +1,6 @@
 import AppKit
+import SwiftUI
+import Combine
 import Sparkle
 
 private final class UpdateDot: NSView {
@@ -12,8 +14,27 @@ private final class UpdateDot: NSView {
 
 /// Sparkle owns scheduling, authenticated download, replacement and relaunch.
 /// No global maintenance agent and no access to the host's private preferences.
-@MainActor final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandardUserDriverDelegate, NSMenuItemValidation {
+@MainActor final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, @preconcurrency SPUStandardUserDriverDelegate, NSMenuItemValidation {
     static let shared = AppUpdater()
+    @Published private var settingsRevision = 0
+    var settingsContent: AnyView { AnyView(AppUpdateSettingsContent(model:self)) }
+    var currentVersion: String { Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "—" }
+    var statusText: String { startupError != nil ? "更新暂不可用" : availableVersion.map { "发现新版本 \($0)" } ?? "通过 GitHub 获取此软件的正式更新" }
+    var canCheck: Bool { startupError != nil || controller.updater.canCheckForUpdates }
+    var automaticChecks: Bool {
+        get { controller.updater.automaticallyChecksForUpdates }
+        set {
+            if !newValue { controller.updater.automaticallyDownloadsUpdates = false }
+            controller.updater.automaticallyChecksForUpdates = newValue; refreshItems()
+        }
+    }
+    var automaticDownloads: Bool {
+        get { controller.updater.automaticallyDownloadsUpdates }
+        set {
+            if newValue { controller.updater.automaticallyChecksForUpdates = true }
+            controller.updater.automaticallyDownloadsUpdates = newValue; refreshItems()
+        }
+    }
     private var controller: SPUStandardUpdaterController!
     private let checkItems = NSHashTable<NSMenuItem>.weakObjects()
     private let parents = NSHashTable<NSMenuItem>.weakObjects()
@@ -48,23 +69,7 @@ private final class UpdateDot: NSView {
     }
 
     func addMenu(to menu: NSMenu) {
-        guard !menu.items.contains(where: { $0.identifier?.rawValue == "app-update-menu" }) else { return }
-        let parent = NSMenuItem(title: "软件更新", action: nil, keyEquivalent: "")
-        parent.identifier = NSUserInterfaceItemIdentifier("app-update-menu")
-        let sub = NSMenu(); parent.submenu = sub
-        func add(_ title: String, _ action: Selector?) -> NSMenuItem {
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-            item.target = self; sub.addItem(item); return item
-        }
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
-        add("当前版本 \(version)", nil).isEnabled = false
-        checkItems.add(add("检查更新…", #selector(check)))
-        sub.addItem(.separator())
-        autoItems.add(add("每天自动检查", #selector(toggleChecks)))
-        installItems.add(add("自动下载并在退出时安装", #selector(toggleInstall)))
-        _ = add("查看发布记录", #selector(showReleases))
-        menu.insertItem(parent, at: max(0, menu.items.count - 1)); parents.add(parent)
-        refreshItems()
+        AppSettingsController.shared.installMenuItem(in:menu)
     }
 
     @objc func check() {
@@ -85,7 +90,7 @@ private final class UpdateDot: NSView {
         if next { controller.updater.automaticallyChecksForUpdates = true }
         controller.updater.automaticallyDownloadsUpdates = next; refreshItems()
     }
-    @objc private func showReleases() {
+    @objc func showReleases() {
         beforeShowingUpdate?()
         NSWorkspace.shared.open(URL(string: "https://github.com/SOSO-245/mac-desktop-widgets/releases")!)
     }
@@ -95,6 +100,7 @@ private final class UpdateDot: NSView {
         return true
     }
     private func refreshItems() {
+        settingsRevision &+= 1
         for item in parents.allObjects { item.title = availableVersion == nil ? "软件更新" : "● 软件更新" }
         for item in checkItems.allObjects { item.title = availableVersion.map { "安装更新 \($0)…" } ?? "检查更新…" }
         for item in autoItems.allObjects { item.state = controller.updater.automaticallyChecksForUpdates ? .on : .off }
@@ -114,4 +120,30 @@ private final class UpdateDot: NSView {
     }
     func updaterDidNotFindUpdate(_ updater: SPUUpdater) { availableVersion = nil; refreshItems() }
     func allowedSystemProfileKeys(for updater: SPUUpdater) -> [String]? { [] }
+}
+
+private struct AppUpdateSettingsContent: View {
+    @ObservedObject var model: AppUpdater
+    var body: some View {
+        VStack(alignment:.leading,spacing:20) {
+            GroupBox {
+                HStack {
+                    VStack(alignment:.leading,spacing:6) {
+                        Text("当前版本 \(model.currentVersion)").font(.headline)
+                        Text(model.statusText).font(.callout).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("检查更新…") { model.check() }.disabled(!model.canCheck)
+                }.padding(10)
+            }
+            GroupBox("自动更新") {
+                VStack(alignment:.leading,spacing:14) {
+                    Toggle("每天自动检查更新",isOn:Binding(get:{model.automaticChecks},set:{model.automaticChecks=$0}))
+                    Toggle("自动下载并在退出时安装",isOn:Binding(get:{model.automaticDownloads},set:{model.automaticDownloads=$0}))
+                    Text("每款软件独立检查和安装更新。关闭自动检查时，也会关闭自动下载。").font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth:.infinity,alignment:.leading).padding(10)
+            }
+            Button("查看 GitHub 发布记录") { model.showReleases() }
+        }.frame(maxWidth:.infinity,alignment:.leading)
+    }
 }

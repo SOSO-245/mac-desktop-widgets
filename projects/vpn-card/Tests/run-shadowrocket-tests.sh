@@ -8,6 +8,8 @@ trap 'rm -rf "$test_build"' EXIT
 xcrun swiftc -swift-version 5 -parse-as-library \
   "$project_root/Sources/Model.swift" \
   "$project_root/Sources/ShadowrocketBackend.swift" \
+  "$project_root/Sources/ShadowrocketNodeControl.swift" \
+  "$project_root/Sources/ShadowrocketReader.swift" \
   "$project_root/Tests/ShadowrocketTests.swift" \
   -o "$test_build/ShadowrocketModelTests"
 "$test_build/ShadowrocketModelTests"

@@ -12,7 +12,7 @@ struct ConnectionView: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("Nikki 连接设置", systemImage:"network").font(.title2.bold())
+            Text("旁路由连接").font(.headline)
             Text("直接连接旁路由，为桌面卡片提供数据。").foregroundStyle(.secondary)
             Form {
                 TextField("控制接口",text:$endpoint)
@@ -40,7 +40,7 @@ struct ConnectionView: View {
                 }
             }
             Spacer(minLength:0)
-        }.padding(24).frame(width:500,height:350).preferredColorScheme(.dark)
+        }.frame(maxWidth:.infinity,alignment:.leading)
     }
 }
 

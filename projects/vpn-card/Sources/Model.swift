@@ -8,6 +8,24 @@ enum ProxyClient: String, CaseIterable {
     var other: ProxyClient { self == .flclash ? .shadowrocket : .flclash }
 }
 
+enum ProxyNodeLabels {
+    static func isInformation(_ name: String) -> Bool {
+        // Providers may encode quota/expiry notices as proxy entries. Share the
+        // same conservative label check across both clients and node pickers.
+        let compact = name.folding(options: [.widthInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .replacingOccurrences(of: "[\\s\\u200B-\\u200D\\uFEFF]", with: "", options: .regularExpression)
+        let labels = ["剩余流量", "套餐到期", "到期时间", "剩余时间", "流量重置", "订阅到期", "下次重置",
+                      "重置倒计时", "套餐已到期", "套餐已过期", "订阅已过期"]
+        if labels.contains(where: compact.contains) { return true }
+        let patterns = [
+            #"(?:距离|距)重置(?:剩余|还有|还剩|剩|:|：)*\d+(?:\.\d+)?(?:天|日|小时|分钟)"#,
+            #"\d+(?:\.\d+)?[kmgt]i?b?[|/｜]\d+(?:\.\d+)?[kmgt]i?b?(?![a-z])"#,
+            #"(?:remainingtraffic|trafficremaining|remainingdata|expires?(?:at|on)?|reset(?:in|after)|daysleft)[:：]?\d"#
+        ]
+        return patterns.contains { compact.range(of: $0, options: [.regularExpression, .caseInsensitive]) != nil }
+    }
+}
+
 enum TrafficScope: String, CaseIterable {
     case all, proxyOnly
     var title: String { self == .all ? "代理＋直连" : "仅代理" }

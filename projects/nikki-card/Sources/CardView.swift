@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct NikkiCard: View {
+    var menuSurface=false
     let size: CardSize
     let siteReadings: [String: SiteReading]
     let siteRoute: String
@@ -23,6 +24,7 @@ struct NikkiCard: View {
     let onQuit: () -> Void
 
     var onTrafficScope: (TrafficScope) -> Void = { _ in }
+    var onAppearance:(()->Void)? = nil
 
     private let secondary = Color(red: 0.66, green: 0.72, blue: 0.83)
     private let cyan = Color(red: 0.38, green: 0.79, blue: 1)
@@ -47,7 +49,7 @@ struct NikkiCard: View {
         .frame(width: size.dimensions.width, height: size.dimensions.height, alignment: .top)
         .foregroundStyle(.white)
         .background {
-            ZStack {
+            if !menuSurface { ZStack {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -62,6 +64,7 @@ struct NikkiCard: View {
                     .strokeBorder(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.065)],
                                                  startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.75)
             }
+        }
         }
         .preferredColorScheme(.dark)
     }
@@ -119,44 +122,7 @@ struct NikkiCard: View {
             .help("切换节点")
             .accessibilityLabel("切换节点")
             }
-            Menu {
-                Button("打开 \(snapshot.client.title)", action: onOpen)
-                Button("切换节点", action: onSwitch)
-                Button("连接设置", action: onSettings)
-                Button("菜单栏显示", action: onMenuSettings)
-                Button("刷新数据", action: onRefresh)
-                Menu("网速统计") {
-                    ForEach(TrafficScope.allCases, id: \.self) { scope in
-                        Button((snapshot.trafficScope == scope ? "✓ " : "") + scope.title) { onTrafficScope(scope) }
-                    }
-                }
-                Menu("卡片尺寸") {
-                    ForEach(CardSize.allCases, id: \.self) { option in
-                        Button((size == option ? "✓ " : "") + option.title) { onSize(option) }
-                    }
-                }
-                Menu("状态栏延迟站点") {
-                    ForEach(ProbeSite.all) { site in
-                        Button((menuSite == site.id ? "✓ " : "") + site.id) { onMenuSite(site.id) }
-                    }
-                }
-                Divider()
-                Toggle("置顶显示", isOn: Binding(get: { alwaysOnTop }, set: { _ in onToggleTop() }))
-                Button(positionLocked ? "解锁位置" : "锁定位置", action: onToggleLock)
-                Divider()
-                Button("退出实时卡片", action: onQuit)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(secondary)
-                    .frame(width: 18, height: 24)
-                    .contentShape(Rectangle())
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("卡片选项")
-            .accessibilityLabel("卡片选项")
+
         }
     }
 

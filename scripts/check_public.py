@@ -13,7 +13,7 @@ PATTERNS={
     'device-id':rb'(?:iot_cn_|miaomiaoc_cn_|zhimi_cn_)[A-Za-z0-9_]{8,}',
 }
 def main():
-    names=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
+    names=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=ROOT).decode().split('\0')
     problems=[];count=0
     for name in filter(None,names):
         path=ROOT/name

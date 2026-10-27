@@ -7,10 +7,11 @@ struct MenuBarSettingsView: View {
     private func binding(_ path: WritableKeyPath<MenuBarPalette,String>) -> Binding<Color> {
         Binding(get:{Color(nsColor:MenuBarPalette.color(palette[keyPath:path]))},set:{palette[keyPath:path]=MenuBarPalette.hex(NSColor($0))})
     }
+    private func save() { options.save(); palette.save(); onSave(options) }
     var body: some View {
         VStack(alignment:.leading,spacing:16) {
-            Label("菜单栏显示",systemImage:"menubar.rectangle").font(.title2.bold())
-            Text("勾选你需要的信息，保存后立即生效。").foregroundStyle(.secondary)
+            Text("基础显示").font(.headline)
+            Text("选择需要显示的信息，更改后立即生效。").foregroundStyle(.secondary)
             HStack(spacing:32) {
                 VStack(alignment:.leading,spacing:12) {
                     Toggle("站点图标",isOn:$options.icon)
@@ -44,12 +45,10 @@ struct MenuBarSettingsView: View {
             }
             Text(options.isEmpty ? "全部取消时保留一个图标，方便重新打开设置。" : "默认荧光绿延迟，超过 2000 ms 粉红；颜色可以分别修改。")
                 .font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Button("恢复默认") { options=MenuBarOptions();palette=MenuBarPalette() }
-                Button("文字与图标…") { NSApp.sendAction(Selector(("customizeMenu")),to:NSApp.delegate,from:nil) }
-                Spacer()
-                Button("保存显示设置") { options.save(); palette.save(); onSave(options) }.buttonStyle(.borderedProminent)
-            }
-        }.padding(24).frame(width:510,height:580).preferredColorScheme(.dark)
+            Button("恢复基础显示默认值") { options=MenuBarOptions();palette=MenuBarPalette() }
+        }
+        .frame(maxWidth:.infinity,alignment:.leading)
+        .onChange(of:options) { _, _ in save() }
+        .onChange(of:palette) { _, _ in save() }
     }
 }

@@ -69,6 +69,7 @@ struct CalendarCard:View {
     let size:CalendarSize
     var action:(String)->Void = {_ in}
     var openDatePicker:(()->Void)? = nil
+    var desktopControls:AnyView? = nil
     var body:some View {
         Group {
             switch size {
@@ -82,16 +83,17 @@ struct CalendarCard:View {
     }
     var isToday:Bool { Almanac.key(selected)==Almanac.key(now) }
     var badge:some View {
+        let reminders=BirthdayReminder.upcoming(data.birthdays,now:now)
         let birthday=data.birthdays.first{$0.occurs(on:selected)}
         let count=data.schedules.filter{$0.occurs(on:selected)}.count
-        let text:Text = birthday.map{Text("生日 · "+$0.name)} ?? (count>0 ? Text("\(count)项日程") : Almanac.festival(selected) != nil ? annotatedDateText(selected,short:false) : Text(holidays.status(selected)))
+        let text:Text = reminders.first.map {Text("🎁 "+$0.title+(reminders.count>1 ? "（另\(reminders.count-1)位）":""))} ?? birthday.map{Text("生日 · "+$0.name)} ?? (count>0 ? Text("\(count)项日程") : Almanac.festival(selected) != nil ? annotatedDateText(selected,short:false) : Text(holidays.status(selected)))
         return text.font(.system(size:10,weight:.medium))
             .foregroundStyle(holidays.day(selected)?.isOffDay == true ? holidayGreen : holidays.day(selected)?.isOffDay == false ? workRed : jade)
-            .lineLimit(1).minimumScaleFactor(0.75)
+            .lineLimit(1).minimumScaleFactor(0.75).help(reminders.map(\.title).joined(separator:"；"))
     }
     var small:some View {
         VStack(alignment:.leading,spacing:3) {
-            HStack { Image(systemName:"moonphase.waxing.crescent").foregroundStyle(jade);Text(Almanac.monthTitle(selected)).font(.system(size:11,weight:.semibold));Spacer(minLength:0) }
+            HStack { if desktopControls == nil {Image(systemName:"moonphase.waxing.crescent").foregroundStyle(jade)};Text(Almanac.monthTitle(selected)).font(.system(size:desktopControls == nil ? 11:10,weight:.semibold));Spacer(minLength:0);if let desktopControls {desktopControls} }
             HStack(alignment:.firstTextBaseline,spacing:7) {
                 Text("\(Almanac.day(selected))").font(.system(size:48,weight:.semibold)).monospacedDigit()
                 VStack(alignment:.leading,spacing:4) { Text(Almanac.weekday(selected)).font(.system(size:10));Text(isToday ? "今天" : "查看").font(.system(size:9)).foregroundStyle(jade) }
@@ -116,7 +118,7 @@ struct CalendarCard:View {
             }.frame(width:84,alignment:.leading)
             Rectangle().fill(.white.opacity(0.12)).frame(width:0.5)
             VStack(spacing:5) {
-                navigation(months:true)
+                HStack {navigation(months:true);if let desktopControls {desktopControls}}
                 MonthGrid(selected:selected,now:now,holidays:holidays,compact:true,action:action)
             }
         }
@@ -126,7 +128,7 @@ struct CalendarCard:View {
             HStack {
                 Image(systemName:"moonphase.waxing.crescent").foregroundStyle(jade)
                 Text("万年历").font(.system(size:14,weight:.semibold));Spacer()
-                Text(isToday ? "今天" : "日期浏览").font(.system(size:10)).foregroundStyle(muted)
+                if let desktopControls {desktopControls} else {Text(isToday ? "今天" : "日期浏览").font(.system(size:10)).foregroundStyle(muted)}
             }
             HStack(alignment:.center,spacing:10) {
                 Text("\(Almanac.day(selected))").font(.system(size:42,weight:.semibold)).monospacedDigit().frame(width:56,alignment:.leading)

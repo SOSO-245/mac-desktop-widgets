@@ -480,6 +480,39 @@ private enum ModelTests {
             snapshot.status = ResetStatus(latestReset:nil,scheduledReset:nil,activeWatch:nil,stats:ResetStats(total:0,lastResetAt:nil,daysSinceLast:nil,avgIntervalDays:nil))
             try check(ResetMenuDisplay.make(snapshot:snapshot,now:now).text == "上次重置时间未知","Missing history invented an elapsed duration")
         }
+        try await run("Explicit schedule attention persists per plan and rearms on a new deadline") {
+            let now=Date();var snapshot=ResetSnapshot.sample;snapshot.isSample=false
+            let first=ResetAttention.pendingKey(snapshot:snapshot,now:now,acknowledged:[])!
+            let acknowledged=ResetAttention.acknowledging(first,in:[])
+            try check(ResetAttention.pendingKey(snapshot:snapshot,now:now,acknowledged:acknowledged)==nil,"Acknowledged plan still flashes")
+            let suite="ResetAttentionTests."+UUID().uuidString
+            let defaults=UserDefaults(suiteName:suite)!;defer {defaults.removePersistentDomain(forName:suite)}
+            defaults.set(acknowledged,forKey:"resetPlan.acknowledged")
+            try check(ResetAttention.pendingKey(snapshot:snapshot,now:now,acknowledged:UserDefaults(suiteName:suite)!.stringArray(forKey:"resetPlan.acknowledged")!)==nil,"Acknowledgement did not persist")
+            let plan=snapshot.status!.scheduledReset!,status=snapshot.status!
+            snapshot.status=ResetStatus(latestReset:status.latestReset,scheduledReset:ScheduledReset(id:plan.id,status:plan.status,resetType:plan.resetType,announcedAt:plan.announcedAt,scheduledFor:plan.scheduledFor!.addingTimeInterval(60)),activeWatch:nil,stats:status.stats)
+            try check(ResetAttention.pendingKey(snapshot:snapshot,now:now,acknowledged:acknowledged) != nil,"Changed deadline must rearm")
+            snapshot.status=ResetStatus(latestReset:status.latestReset,scheduledReset:ScheduledReset(id:plan.id+"-new",status:plan.status,resetType:plan.resetType,announcedAt:plan.announcedAt,scheduledFor:plan.scheduledFor),activeWatch:nil,stats:status.stats)
+            try check(ResetAttention.pendingKey(snapshot:snapshot,now:now,acknowledged:acknowledged) != nil,"New identity must rearm")
+            try check(ResetAttention.acknowledging(first,in:acknowledged)==acknowledged,"Duplicate acknowledgement grew history")
+            try check(ResetAttention.acknowledging("last",in:(0..<40).map(String.init)).count==32,"Acknowledgement cache unbounded")
+        }
+        try await run("No flashing for sample, stale, undated, watch-only or cancelled plans") {
+            let now=Date();var snapshot=ResetSnapshot.sample
+            try check(ResetAttention.planKey(snapshot:snapshot,now:now)==nil,"Sample generated live reminder")
+            snapshot.isSample=false;snapshot.issue="offline"
+            try check(ResetAttention.planKey(snapshot:snapshot,now:now)==nil,"Offline schedule generated reminder")
+            snapshot.issue=nil;snapshot.checkedAt=now.addingTimeInterval(-3601)
+            try check(ResetAttention.planKey(snapshot:snapshot,now:now)==nil,"Stale schedule generated reminder")
+            snapshot.checkedAt=now
+            let stats=snapshot.status!.stats
+            for state in ["scheduled","cancelled"] {
+                snapshot.status=ResetStatus(latestReset:nil,scheduledReset:ScheduledReset(id:"test",status:state,resetType:"regular",announcedAt:now,scheduledFor:state=="scheduled" ? nil:now.addingTimeInterval(60)),activeWatch:nil,stats:stats)
+                try check(ResetAttention.planKey(snapshot:snapshot,now:now)==nil,"Undated or cancelled plan generated reminder")
+            }
+            snapshot.status=ResetStatus(latestReset:nil,scheduledReset:nil,activeWatch:ActiveWatch(expiresAt:now.addingTimeInterval(60)),stats:stats)
+            try check(ResetAttention.planKey(snapshot:snapshot,now:now)==nil,"Watch generated reminder")
+        }
         print("\n\(passed) model, network and navigation tests passed. All HTTP requests used local URLProtocol stubs.")
     }
 }

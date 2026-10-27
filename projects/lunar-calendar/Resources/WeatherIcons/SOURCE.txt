@@ -1,0 +1,4 @@
+Meteocons https://github.com/basmilius/meteocons
+MIT; @meteocons/svg 0.1.0 from npm, fill variant.
+Archive SHA-512: 67fe34451e98cc88dd37ca8b53345c6436846077de914e6b9c74c7e39103559405d4dca5748469885a6b71429db88bf854ad2477a532f8e3b26b8356c2e73606
+License verified from commit 70dfb1d6e30dc9e791cfb0e4c5b5e5e60e972aa0.

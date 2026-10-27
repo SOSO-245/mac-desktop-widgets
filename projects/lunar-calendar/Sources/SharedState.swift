@@ -169,3 +169,23 @@ enum CalendarDataStore {
     }
 #endif
 }
+
+/// Reminders are relative to the actual current Beijing date, never the browsed month.
+struct BirthdayReminder:Identifiable {
+    let birthday:Birthday
+    let date:Date
+    let daysUntil:Int
+    var id:UUID {birthday.id}
+    var timing:String {daysUntil == 0 ? "今天生日":daysUntil == 1 ? "明天生日":"\(daysUntil)天后生日"}
+    var title:String {birthday.name+" · "+timing}
+    static func upcoming(_ birthdays:[Birthday],now:Date)->[Self] {
+        let today=Almanac.gregorian.startOfDay(for:now)
+        return birthdays.filter(\.valid).compactMap {birthday in
+            for offset in 0...3 {
+                guard let date=Almanac.gregorian.date(byAdding:.day,value:offset,to:today) else{continue}
+                if birthday.occurs(on:date) {return Self(birthday:birthday,date:date,daysUntil:offset)}
+            }
+            return nil
+        }.sorted {a,b in a.daysUntil != b.daysUntil ? a.daysUntil<b.daysUntil : a.birthday.name != b.birthday.name ? a.birthday.name<b.birthday.name : a.id.uuidString<b.id.uuidString}
+    }
+}

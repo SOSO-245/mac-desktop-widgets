@@ -6,6 +6,14 @@ let resetsWidgetKind = "CodexResetsWidget"
 enum ResetNavigation {
     static let widgetURL = URL(string: "codexresets://website")!
 
+    static func originalPostURL(_ raw:String?) -> URL? {
+        guard let raw, let url=URL(string:raw), url.scheme?.lowercased()=="https",
+              let host=url.host?.lowercased(), ["x.com","www.x.com","twitter.com","www.twitter.com"].contains(host),
+              url.user==nil, url.password==nil, url.port==nil,
+              url.path.range(of:"^/[A-Za-z0-9_]+/status/[0-9]+/?$",options:.regularExpression) != nil else {return nil}
+        return url
+    }
+
     static func websiteDestination(for url: URL) -> URL? {
         // Accept the old timeline URL as well as the new explicit widget route.
         // Never forward an arbitrary URL or URL-supplied redirect destination.
@@ -250,5 +258,23 @@ struct ResetMenuDisplay {
             return .init(text:(stale ? "缓存 · " : "") + "已重置 \(days) 天 \(hours) 小时",tone:snapshot.isSample ? .neutral : .green)
         case .unavailable: return .init(text:"重置 —",tone:.neutral)
         }
+    }
+}
+
+// Only a fresh, explicitly dated schedule is actionable. Persist acknowledgements
+// by schedule identity AND deadline so a revised time asks for attention again.
+enum ResetAttention {
+    static func planKey(snapshot:ResetSnapshot,now:Date)->String? {
+        guard !snapshot.isSample,!snapshot.isStale(at:now),
+              let plan=snapshot.status?.scheduledReset,plan.status=="scheduled",
+              let deadline=plan.scheduledFor,deadline.timeIntervalSince1970.isFinite else {return nil}
+        return plan.id+"|"+String(format:"%.3f",deadline.timeIntervalSince1970)
+    }
+    static func pendingKey(snapshot:ResetSnapshot,now:Date,acknowledged:[String])->String? {
+        guard let key=planKey(snapshot:snapshot,now:now),!acknowledged.contains(key) else{return nil}
+        return key
+    }
+    static func acknowledging(_ key:String,in previous:[String])->[String] {
+        Array((previous.filter{$0 != key}+[key]).suffix(32))
     }
 }

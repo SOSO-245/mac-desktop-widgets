@@ -11,9 +11,9 @@ import ServiceManagement
     @Published var data=CalendarDataStore.load()
     @Published var storageNote=""
     @Published var showBirthdayEditor=false
-    @Published var showSettings=false
     @Published var showScheduleEditor=false
     @Published var showAgenda=false
+    let cloudSync=CalendarCloudSync()
     var editingBirthday:Birthday?
     func addBirthday(_ birthday:Birthday)->Bool {
         var next=data
@@ -27,7 +27,7 @@ import ServiceManagement
     func apply(_ next:CalendarUserData)->Bool {
         do {try CalendarDataStore.save(next);data=next;storageNote=""
             do {try CalendarDataStore.mirror(next)} catch {storageNote="已保存，桌面组件等待同步"}
-            WidgetCenter.shared.reloadTimelines(ofKind:calendarWidgetKind);return true}
+            WidgetCenter.shared.reloadTimelines(ofKind:calendarWidgetKind);cloudSync.localChanged();return true}
         catch {storageNote="设置未完整保存或组件尚未同步，请重试。";return false}
     }
     func beginBirthday(_ existing:Birthday?=nil) {editingBirthday=existing;showBirthdayEditor=true}
@@ -79,7 +79,7 @@ struct CalendarWindow:View {
                 Spacer()
                 Button {model.select("today")} label:{Label("回到今天",systemImage:"arrow.uturn.backward")}
                 Button {Task {await model.update(force:true)}} label:{Label(model.busy ? "更新中" : "更新假期",systemImage:"arrow.clockwise")}.disabled(model.busy)
-                Button {model.showSettings=true} label:{Image(systemName:"slider.horizontal.3")}.help("显示与外观")
+                Button {AppSettingsController.shared.show("data")} label:{Image(systemName:"slider.horizontal.3")}.help("设置")
                 Button {showHelp.toggle()} label:{Image(systemName:"info.circle")}.help("添加组件与数据来源")
             }.buttonStyle(.borderless)
             HStack(alignment:.top,spacing:28) {
@@ -125,8 +125,6 @@ struct CalendarWindow:View {
             }
             if showHelp {
                 VStack(alignment:.leading,spacing:7) {
-                    Toggle("登录时自动启动",isOn:Binding(get:{model.autoStart},set:{model.setAutoStart($0)}))
-                    if !model.startupNote.isEmpty {Text(model.startupNote)}
                     Text("添加到桌面：右键桌面 → 编辑小组件 → 搜索“万年历” → 选择小 / 中 / 大。")
                     Text("组件内可翻日、翻月、选择日期；点击主体打开完整日历。回到今天后自动跟随当天。")
                     Text("假期数据来自 holiday-cn，按国务院通知整理，每天检查更新。未收录年份不推算调休；普通周末与法定假日分开显示。")
@@ -139,7 +137,6 @@ struct CalendarWindow:View {
         .environment(\.locale,Locale(identifier:"zh_CN"))
         .environment(\.calendarData,model.data)
         .sheet(isPresented:$model.showBirthdayEditor) {BirthdayEditor(model:model,existing:model.editingBirthday)}
-        .sheet(isPresented:$model.showSettings) {DisplaySettings(model:model)}
         .sheet(isPresented:$model.showScheduleEditor) {ScheduleEditor(model:model)}
         .sheet(isPresented:$model.showAgenda) {AgendaSheet(model:model)}
         .task(id:Almanac.year(selected)) {await model.update()}
@@ -202,6 +199,7 @@ struct MonthYearButton:View {
     }
 }
 struct MenuCalendar:View {
+    var menuSurface=false
     @ObservedObject var model:CalendarModel
     var openWindow:()->Void
     @State private var choosingMonth=false
@@ -214,23 +212,24 @@ struct MenuCalendar:View {
                 Button("打开万年历",action:openWindow)
                 Button {openWindow();model.showScheduleEditor=true} label:{Image(systemName:"calendar.badge.plus")}.help("添加日程")
                 Button {openWindow();model.beginBirthday()} label:{Image(systemName:"gift")}.help("添加生日")
-                Button {openWindow();model.showSettings=true} label:{Image(systemName:"slider.horizontal.3")}.help("显示与外观")
+                Button {AppSettingsController.shared.show("data")} label:{Image(systemName:"slider.horizontal.3")}.help("设置")
                 Spacer()
                 Button {Task {await model.update(force:true)}} label:{Image(systemName:"arrow.clockwise")}.help("更新假期").disabled(model.busy)
                 Button {NSApp.terminate(nil)} label:{Image(systemName:"power")}.help("退出万年历")
             }.buttonStyle(.borderless).font(.system(size:11)).foregroundStyle(jade).padding(.horizontal,15).padding(.top,12)
-            Toggle("登录时启动",isOn:Binding(get:{model.autoStart},set:{model.setAutoStart($0)})).toggleStyle(.checkbox).font(.system(size:10)).foregroundStyle(muted).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,15).padding(.vertical,10)
-            if !model.startupNote.isEmpty {Text(model.startupNote).font(.system(size:10)).foregroundStyle(muted).padding(.bottom,8)}
-        }.background(CalendarBackground()).environment(\.calendarData,model.data).preferredColorScheme(.dark)
+        }.background{if !menuSurface{CalendarBackground()}}.environment(\.calendarData,model.data).preferredColorScheme(.dark)
          .task(id:Almanac.year(model.selected)) {await model.update()}
     }
 }
 @MainActor final class CalendarDelegate:NSObject,NSApplicationDelegate {
     let model=CalendarModel()
+    let weather=CalendarWeatherStore()
+    let desktop=LiveDesktopCard()
     var window:NSWindow?
     var status:NSStatusItem?
     let updateMenu=NSMenu()
     let popover=NSPopover()
+    let statusPopover=StatusPopover()
     var clock:Timer?
     var midnightClock:Timer?
     var wakeObserver:NSObjectProtocol?
@@ -240,15 +239,26 @@ struct MenuCalendar:View {
     var interactionMonitor:Any?
     func applicationDidFinishLaunching(_ notification:Notification) {
         WidgetSelfRepair.shared.start()
+        DesktopCardAppearance.shared.configure(forceGlass:true)
         if let url=Bundle.main.url(forResource:"AppIcon",withExtension:"icns") {NSApp.applicationIconImage=NSImage(contentsOf:url)}
         let menu=NSMenu();let item=NSMenuItem();let appMenu=NSMenu()
         appMenu.addItem(withTitle:"退出万年历",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"q");item.submenu=appMenu;menu.addItem(item);NSApp.mainMenu=menu
+        configureSettings()
+        AppSettingsController.shared.installMenuItem(in:appMenu)
         AppUpdater.shared.addMenu(to:appMenu)
         interactionMonitor=NSEvent.addLocalMonitorForEvents(matching:[.leftMouseDown,.rightMouseDown,.keyDown,.scrollWheel]) {[weak self] event in
             Task {@MainActor in self?.model.recordInteraction()}
             return event
         }
         installStatusItem()
+        desktop.weatherSettings = {[weak self] in self?.showWeatherSettings()}
+        desktop.start(title:"万年历",menu:updateMenu,refresh:{[weak self] in Task {@MainActor in await self?.model.update(force:true);await self?.weather.refresh(force:true)}},content:{[weak self] size,_,controls in
+            guard let self else{return AnyView(EmptyView())}
+            return AnyView(CalendarDesktopContent(model:self.model,weather:self.weather,size:CalendarSize(rawValue:size) ?? .medium,weatherLayout:self.desktop.weatherLayout,controls:controls,settings:{[weak self] in self?.showWeatherSettings()}))
+        })
+        weather.start()
+        model.cloudSync.start(model:model)
+        NotificationCenter.default.addObserver(self,selector:#selector(syncAppearanceApplied),name:Notification.Name("CalendarSyncApplied"),object:nil)
         scheduleMidnightUpdate()
         wakeObserver=NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didWakeNotification,object:nil,queue:.main) {[weak self] _ in Task {@MainActor in self?.checkMidnightUpdate()}}
         timeObserver=NotificationCenter.default.addObserver(forName:.NSSystemClockDidChange,object:nil,queue:.main) {[weak self] _ in Task {@MainActor in self?.checkMidnightUpdate()}}
@@ -273,6 +283,16 @@ struct MenuCalendar:View {
         popover.behavior = .transient
         popover.contentSize=NSSize(width:344,height:414)
         popover.contentViewController=NSHostingController(rootView:MenuCalendar(model:model,openWindow:{[weak self] in self?.popover.performClose(nil);self?.show()}))
+        if let status {
+            statusPopover.legacyToggle = {[weak self] in self?.toggleCalendar()}
+            statusPopover.legacyClose = {[weak self] in self?.popover.performClose(nil)}
+            statusPopover.legacyIsShown = {[weak self] in self?.popover.isShown ?? false}
+            statusPopover.attach(to:status,menu:updateMenu,size:NSSize(width:344,height:414),openTitle:"打开万年历",
+                open:{[weak self] in self?.show()},content:{[weak self] native in
+                    guard let self else{return AnyView(EmptyView())}
+                    return AnyView(MenuCalendar(menuSurface:native,model:self.model,openWindow:{[weak self] in self?.statusPopover.close();self?.show()}))
+                })
+        }
         refreshStatus()
         appearanceObserver=status?.button?.observe(\.effectiveAppearance,options:[.new]) {[weak self] _,_ in DispatchQueue.main.async {self?.refreshStatus()}}
         preferencesObserver=model.$data.dropFirst().sink {[weak self] _ in DispatchQueue.main.async {self?.refreshStatus()}}
@@ -299,8 +319,30 @@ struct MenuCalendar:View {
                 MenuField(id:"weekday",title:"星期",value:Almanac.weekday(now),defaultVisible:false),
                 MenuField(id:"holiday",title:"法定节假日",value:model.holidays.day(now)?.name ?? "—",defaultVisible:false)]
     }
-    @objc private func customizeMenu() {
-        MenuCustomizationPanel.shared.show(title:"万年历",fields:customMenuFields(),icon:MenuIconRenderer.image(model.data.menuIcon)) { [weak self] in self?.refreshStatus() }
+    @objc private func syncAppearanceApplied() {refreshStatus()}
+    @objc private func customizeMenu() {AppSettingsController.shared.show("menubar")}
+    func configureSettings() {
+        ToolboxBridge.shared.start(show:{[weak self] visible in self?.desktop.setVisible(visible)},size:{[weak self] value in self?.desktop.setSize(value)})
+        AppSettingsController.shared.configure(title:"万年历",pages:[
+            AppSettingsPage(id:"toolbox",title:"桌面排列",symbol:"square.grid.2x2") {AnyView(ToolboxSettingsLink())},
+            AppSettingsPage(id:"general",title:"通用",symbol:"gearshape") {[weak self] in guard let self else{return AnyView(EmptyView())};return AnyView(CalendarGeneralSettings(model:self.model))},
+            AppSettingsPage(id:"desktop",title:"桌面卡片",symbol:"rectangle.on.rectangle") {[weak self] in guard let self else{return AnyView(EmptyView())};return AnyView(CalendarDesktopSettings(desktop:self.desktop))},
+            AppSettingsPage(id:"menubar",title:"菜单栏",symbol:"menubar.rectangle") {[weak self] in
+                guard let self else{return AnyView(EmptyView())}
+                return AnyView(VStack(alignment:.leading,spacing:22) {
+                    self.statusPopover.settingsContent
+                    Divider()
+                    CalendarMenuDefaults(model:self.model)
+                    Divider()
+                    MenuCustomizationView(fields:self.customMenuFields(),fallback:MenuIconRenderer.image(self.model.data.menuIcon),extraColors:[],onSave:{[weak self] in self?.refreshStatus();self?.model.cloudSync.localChanged()})
+                })
+            },
+            AppSettingsPage(id:"data",title:"日历与天气",symbol:"calendar") {[weak self] in guard let self else{return AnyView(EmptyView())};return AnyView(CalendarDataSettings(model:self.model,weather:self.weather))},
+            AppSettingsPage(id:"updates",title:"软件更新",symbol:"arrow.down.circle") {AppUpdater.shared.settingsContent}
+        ],beforeShow:{[weak self] in
+            self?.statusPopover.close();self?.popover.performClose(nil)
+            self?.model.autoStart=SMAppService.mainApp.status == .enabled
+        })
     }
     func refreshStatus() {
         model.returnIfIdle()
@@ -332,6 +374,7 @@ struct MenuCalendar:View {
         if let u=urls.first,u.scheme=="lunarcalendar",u.host=="date",let d=Almanac.date(u.lastPathComponent) {model.select(Almanac.key(d))}
         show()
     }
+    func showWeatherSettings() {AppSettingsController.shared.show("data")}
     @objc func show() {
         if window==nil {
             let w=NSWindow(contentRect:NSRect(x:0,y:0,width:880,height:600),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)

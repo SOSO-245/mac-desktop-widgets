@@ -48,7 +48,7 @@ def generate_project():
     def d(values):
         return '{ ' + ' '.join(key + ' = ' + value + ';' for key, value in values.items()) + ' }'
 
-    source_names = ['AppUpdater.swift', 'StatusPopover.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift', 'Widget.swift']
+    source_names = ['ToolboxShared.swift', 'ToolboxBridge.swift', 'AppSettings.swift', 'LiveDesktopCard.swift', 'LiveReactions.swift', 'DesktopReactions.swift', 'ReactionModel.swift', 'AppUpdater.swift', 'StatusPopover.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift', 'Widget.swift']
     for name in source_names:
         obj(name, d({'isa': 'PBXFileReference', 'lastKnownFileType': 'sourcecode.swift',
                      'path': q('Sources/' + name), 'sourceTree': q('<group>')}))
@@ -66,7 +66,7 @@ def generate_project():
     obj('app-resources', d({'isa': 'PBXResourcesBuildPhase', 'buildActionMask': '2147483647',
                            'files': arr([ident('icon-build')]), 'runOnlyForDeploymentPostprocessing': '0'}))
 
-    target_sources = [('app', ['AppUpdater.swift', 'StatusPopover.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift']),
+    target_sources = [('app', ['ToolboxShared.swift', 'ToolboxBridge.swift', 'AppSettings.swift', 'LiveDesktopCard.swift', 'LiveReactions.swift', 'DesktopReactions.swift', 'ReactionModel.swift', 'AppUpdater.swift', 'StatusPopover.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'ResetCard.swift', 'Host.swift']),
                       ('widget', ['Model.swift', 'ResetCard.swift', 'Widget.swift'])]
     for target, files in target_sources:
         is_widget = target == 'widget'
@@ -135,7 +135,7 @@ def generate_project():
     }), encoding='utf-8')
 
     common = {
-        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.1.0',
+        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.4.1',
         'CFBundleVersion': datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
         'CFBundleExecutable': '$(EXECUTABLE_NAME)', 'CFBundleIdentifier': '$(PRODUCT_BUNDLE_IDENTIFIER)',
         'CFBundleName': '$(PRODUCT_NAME)', 'LSMinimumSystemVersion': '14.0',
@@ -191,6 +191,8 @@ def main():
     run(['xcodebuild', '-project', PROJECT, '-target', APP_TARGET, '-configuration', 'Release',
          'SYMROOT=' + str(build), 'CODE_SIGN_IDENTITY=-', '-quiet'], cwd=ROOT)
     source = build / 'Release' / (APP_NAME + '.app')
+    # Ship attribution with the native turbulence/glow adaptation, before signing.
+    (source / 'Contents/Resources/ElectricBorder-MIT.txt').write_bytes((ROOT / 'Assets/ElectricBorder-MIT.txt').read_bytes())
     updater_build.finish(ROOT, source)
     run(['codesign', '--verify', '--deep', '--strict', source])
     output = source

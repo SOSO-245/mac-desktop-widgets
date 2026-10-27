@@ -49,7 +49,7 @@ def generate_project():
     def d(values):
         return '{ ' + ' '.join(key + ' = ' + value + ';' for key, value in values.items()) + ' }'
 
-    source_names = ['AppUpdater.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarCard.swift', 'Host.swift', 'AppFeatures.swift', 'Widget.swift']
+    source_names = ['ToolboxShared.swift', 'ToolboxBridge.swift', 'AppSettings.swift', 'CalendarSettings.swift', 'AppUpdater.swift', 'StatusPopover.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarSyncModel.swift', 'CalendarSyncFiles.swift', 'CalendarCloudSync.swift', 'CalendarCard.swift', 'CalendarWeather.swift', 'CalendarWeatherLocation.swift', 'CalendarWeatherTrend.swift', 'CalendarDesktopCard.swift', 'WeatherAtmosphere.swift', 'LiveDesktopCard.swift', 'Host.swift', 'AppFeatures.swift', 'Widget.swift']
     for name in source_names:
         obj(name, d({'isa': 'PBXFileReference', 'lastKnownFileType': 'sourcecode.swift',
                      'path': q('Sources/' + name), 'sourceTree': q('<group>')}))
@@ -61,7 +61,7 @@ def generate_project():
                       'name': 'Products', 'sourceTree': q('<group>')}))
     obj('icon-file', d({'isa': 'PBXFileReference', 'lastKnownFileType': 'image.icns',
                        'path': q('Assets/AppIcon.icns'), 'sourceTree': q('<group>')}))
-    obj('main-group', d({'isa': 'PBXGroup', 'children': arr([ident(name) for name in source_names + ['icon-file', 'license-file', 'catalog-file', 'products']]),
+    obj('main-group', d({'isa': 'PBXGroup', 'children': arr([ident(name) for name in source_names + ['icon-file', 'license-file', 'weather-icons', 'weather-textures', 'catalog-file', 'products']]),
                         'sourceTree': q('<group>')}))
     obj('catalog-file', d({'isa': 'PBXFileReference', 'lastKnownFileType': 'folder.assetcatalog', 'path': q('Assets/Assets.xcassets'), 'sourceTree': q('<group>')}))
     obj('catalog-app', d({'isa': 'PBXBuildFile', 'fileRef': ident('catalog-file')}))
@@ -70,10 +70,14 @@ def generate_project():
     obj('license-file', d({'isa': 'PBXFileReference', 'lastKnownFileType': 'text', 'path': q('THIRD-PARTY-NOTICES.txt'), 'sourceTree': q('<group>')}))
     obj('license-build', d({'isa': 'PBXBuildFile', 'fileRef': ident('license-file')}))
     obj('icon-build', d({'isa': 'PBXBuildFile', 'fileRef': ident('icon-file')}))
+    obj('weather-icons', d({'isa':'PBXFileReference', 'lastKnownFileType':'folder', 'path':q('Resources/WeatherIcons'), 'sourceTree':q('<group>')}))
+    obj('weather-textures', d({'isa':'PBXFileReference','lastKnownFileType':'folder','path':q('Resources/WeatherTextures'),'sourceTree':q('<group>')}))
+    obj('weather-textures-build', d({'isa':'PBXBuildFile','fileRef':ident('weather-textures')}))
+    obj('weather-build', d({'isa':'PBXBuildFile', 'fileRef':ident('weather-icons')}))
     obj('app-resources', d({'isa': 'PBXResourcesBuildPhase', 'buildActionMask': '2147483647',
-                           'files': arr([ident('icon-build'),ident('license-build'),ident('catalog-app')]), 'runOnlyForDeploymentPostprocessing': '0'}))
+                           'files': arr([ident('icon-build'),ident('license-build'),ident('catalog-app'),ident('weather-build'),ident('weather-textures-build')]), 'runOnlyForDeploymentPostprocessing': '0'}))
 
-    target_sources = [('app', ['AppUpdater.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarCard.swift', 'Host.swift', 'AppFeatures.swift']),
+    target_sources = [('app', ['ToolboxShared.swift', 'ToolboxBridge.swift', 'AppSettings.swift', 'CalendarSettings.swift', 'AppUpdater.swift', 'StatusPopover.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarSyncModel.swift', 'CalendarSyncFiles.swift', 'CalendarCloudSync.swift', 'CalendarCard.swift', 'CalendarWeather.swift', 'CalendarWeatherLocation.swift', 'CalendarWeatherTrend.swift', 'CalendarDesktopCard.swift', 'WeatherAtmosphere.swift', 'LiveDesktopCard.swift', 'Host.swift', 'AppFeatures.swift']),
                       ('widget', ['SolarTerms.swift', 'Model.swift', 'SharedState.swift', 'CalendarCard.swift', 'Widget.swift'])]
     for target, files in target_sources:
         is_widget = target == 'widget'
@@ -146,13 +150,13 @@ def generate_project():
     }), encoding='utf-8')
 
     common = {
-        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.1.0',
+        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.4.7',
         'CFBundleVersion': datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
         'CFBundleExecutable': '$(EXECUTABLE_NAME)', 'CFBundleIdentifier': '$(PRODUCT_BUNDLE_IDENTIFIER)',
         'CFBundleName': '$(PRODUCT_NAME)', 'LSMinimumSystemVersion': '14.0',
     }
     app = dict(common, CFBundlePackageType='APPL', CFBundleDisplayName=APP_NAME,
-               CFBundleIconFile='AppIcon', LSUIElement=True, NSPrincipalClass='NSApplication', NSCalendarsWriteOnlyAccessUsageDescription='将你在万年历填写的日程添加到系统默认日历，不读取其他日程。', NSContactsUsageDescription='将你选定的公历或农历生日写入指定联系人，已有生日会先请你确认替换。',
+               NSLocationUsageDescription='按所在区县显示当前天气、湿度与空气质量，不持续跟踪位置。', NSLocationWhenInUseUsageDescription='按所在区县显示当前天气、湿度与空气质量，不持续跟踪位置。', NSAppTransportSecurity={'NSAllowsLocalNetworking':True}, CFBundleIconFile='AppIcon', LSUIElement=True, NSPrincipalClass='NSApplication', NSCalendarsWriteOnlyAccessUsageDescription='将你在万年历填写的日程添加到系统默认日历，不读取其他日程。', NSContactsUsageDescription='将你选定的公历或农历生日写入指定联系人，已有生日会先请你确认替换。',
                CFBundleURLTypes=[{'CFBundleURLName': BUNDLE_ID + '.navigation',
                                   'CFBundleURLSchemes': ['lunarcalendar']}])
     widget = dict(common, CFBundlePackageType='XPC!', CFBundleDisplayName=APP_NAME,

@@ -82,7 +82,7 @@ private enum ShadowrocketValues {
     }
 }
 
-struct ShadowrocketQuota {
+struct ShadowrocketQuota: Sendable {
     let usedBytes: Double
     let totalBytes: Double
     let expiresAt: Date?
@@ -119,7 +119,7 @@ struct ShadowrocketQuota {
     }
 }
 
-struct ShadowrocketSelection {
+struct ShadowrocketSelection: Sendable {
     let selectedUUID: String
     let nodeName: String?
     let latencyMS: Int?
@@ -153,9 +153,7 @@ struct ShadowrocketSelection {
     }
 
     static func isInformationNode(_ name: String) -> Bool {
-        if ["剩余流量", "套餐到期", "到期时间", "剩余时间", "流量重置", "订阅到期"].contains(where: name.contains) { return true }
-        let quotaPattern = "\\d+(?:\\.\\d+)?\\s*[KMGT]I?B?\\s*[|/｜]\\s*\\d+(?:\\.\\d+)?\\s*[KMGT]I?B?"
-        return name.range(of: quotaPattern, options: [.regularExpression, .caseInsensitive]) != nil
+        ProxyNodeLabels.isInformation(name)
     }
 }
 
@@ -247,17 +245,17 @@ struct ShadowrocketVPNCounter {
 final class ShadowrocketMonitor: ObservableObject {
     @Published var snapshot = MonitorSnapshot(client: .shadowrocket)
     private var task: Task<Void, Never>?
+    private var metadataTask: Task<Void, Never>?
+    private var generation = UUID()
+    private var generationStartedAt = ProcessInfo.processInfo.systemUptime
+    private let diskReader: ShadowrocketDiskReader
     private let metadataLog = Logger(subsystem: "local.homeatlas.FlClashMonitor", category: "metadata")
     private var lastMetadataError: String?
     private var previousVPNCounter: ShadowrocketVPNCounter?
     private var vpnService: (id: String, connection: SCNetworkConnection)?
     private var lastServiceDiscovery: Double?
     private var selectedUUID: String?
-    private struct Endpoint: Equatable {
-        let host: String
-        let port: UInt16
-    }
-    private var endpoint: Endpoint?
+    private var endpoint: ShadowrocketTCPAddress?
     private var savedLatency: Int?
     private var liveLatency: Int?
     private var liveLatencyAt: Date?
@@ -265,11 +263,12 @@ final class ShadowrocketMonitor: ObservableObject {
     private var probeFailed = false
     private var probeConnection: NWConnection?
     private var probeTimeout: Task<Void, Never>?
-    private let root = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Group Containers/group.com.liguangming.Shadowrocket")
+    init(reader: ShadowrocketDiskReader? = nil) { diskReader = reader ?? .shared }
 
     func start() {
         guard task == nil else { return }
+        generation = UUID()
+        generationStartedAt = ProcessInfo.processInfo.systemUptime
         task = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -281,6 +280,10 @@ final class ShadowrocketMonitor: ObservableObject {
     }
 
     func stop() {
+        generation = UUID()
+        generationStartedAt = ProcessInfo.processInfo.systemUptime
+        metadataTask?.cancel()
+        metadataTask = nil
         task?.cancel()
         task = nil
         previousVPNCounter = nil
@@ -293,77 +296,91 @@ final class ShadowrocketMonitor: ObservableObject {
 
     func refresh() {
         snapshot.isRunning = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.liguangming.Shadowrocket" }
-        do {
-            let prefsURL = root.appendingPathComponent("Library/Preferences/group.com.liguangming.Shadowrocket.plist")
-            guard let prefs = try PropertyListSerialization.propertyList(from: Data(contentsOf: prefsURL), format: nil) as? [String: Any],
-                  let records = try ShadowrocketArchive.decode(Data(contentsOf: root.appendingPathComponent("ServerManager"))) as? [[String: Any]] else {
-                throw CocoaError(.fileReadCorruptFile)
-            }
-            let selected = ShadowrocketSelection.decode(preferences: prefs, records: records)
-            snapshot.metadataIssue = selected == nil ? "未识别所选节点" : nil
-            lastMetadataError = nil
-            let selectedRecord = records.first { $0["uuid"] as? String == selected?.selectedUUID }
-            let nextEndpoint = selected?.nodeName == nil ? nil : selectedRecord.flatMap(Self.tcpEndpoint)
-            if selected?.selectedUUID != selectedUUID || nextEndpoint != endpoint {
-                clearSpeeds()
-                previousVPNCounter = nil
-                cancelProbe()
-                liveLatency = nil
-                liveLatencyAt = nil
-                lastProbeAt = nil
-                probeFailed = false
-                selectedUUID = selected?.selectedUUID
-                endpoint = nextEndpoint
-            }
-            snapshot.nodeName = selected?.nodeName
-            savedLatency = selected?.latencyMS
-            updateLatencyDisplay()
-            snapshot.groupName = selected == nil ? nil : "已选节点"
-            snapshot.profileName = selected?.profileName
-            snapshot.usedBytes = selected?.quota?.usedBytes
-            snapshot.totalBytes = selected?.quota?.totalBytes
-            snapshot.expiresAt = selected?.quota?.expiresAt
-            snapshot.subscriptionUpdatedAt = selected?.updatedAt
-        } catch {
-            let failure = error as NSError
-            let code = "\(failure.domain):\(failure.code)"
-            if code != lastMetadataError {
-                metadataLog.error("Shadowrocket metadata read failed: \(code, privacy: .public)")
-                lastMetadataError = code
-            }
-            let denied = (failure.domain == NSCocoaErrorDomain && failure.code == NSFileReadNoPermissionError)
-                || (failure.domain == NSPOSIXErrorDomain && [1, 13].contains(failure.code))
-            snapshot.metadataIssue = denied ? "请允许读取应用数据" : "节点数据读取失败"
-            selectedUUID = nil
-            endpoint = nil
-            savedLatency = nil
-            liveLatency = nil
-            cancelProbe()
-            snapshot.nodeName = nil
-            snapshot.latencyMS = nil
-            snapshot.latencyIsLive = false
-            snapshot.latencyKind = "保存的测速结果"
-            snapshot.groupName = nil
-            snapshot.profileName = nil
-            snapshot.usedBytes = nil
-            snapshot.totalBytes = nil
-            snapshot.expiresAt = nil
-            snapshot.subscriptionUpdatedAt = nil
-        }
+        // Metadata access may wait for macOS app-data permission. It must never
+        // delay status/traffic sampling or the main run loop.
+        refreshMetadata()
         readTraffic()
         updateLatencyDisplay()
         probeLatencyIfNeeded()
     }
 
-    private static func tcpEndpoint(_ record: [String: Any]) -> Endpoint? {
-        let type = (record["type"] as? String ?? "").lowercased()
-        // TCP handshakes are not a useful test for UDP-only protocols.
-        let supported = ["vless", "vmess", "trojan", "trojan-go", "snell", "shadowsocks", "shadowsocksr", "ss", "ssr", "socks", "socks5", "http", "https", "ssh"]
-        guard supported.contains(type), let host = record["host"] as? String,
-              !host.isEmpty, host.count <= 255, !host.contains("://"),
-              host.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
-              let portText = record["port"] as? String, let port = UInt16(portText), port > 0 else { return nil }
-        return Endpoint(host: host, port: port)
+    func refreshMetadata() {
+        guard metadataTask == nil else { return }
+        let run = generation
+        metadataTask = Task { [weak self] in
+            guard let self, run == self.generation, !Task.isCancelled else { return }
+            defer { if run == self.generation { self.metadataTask = nil } }
+            do {
+                let value = try await self.diskReader.read(notBefore: self.generationStartedAt)
+                guard run == self.generation, !Task.isCancelled else { return }
+                self.applyMetadata(value)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard run == self.generation, !Task.isCancelled else { return }
+                self.metadataFailed(error)
+            }
+        }
+    }
+
+    private func applyMetadata(_ value: ShadowrocketDiskSnapshot) {
+        let selected = value.selection
+        snapshot.metadataIssue = selected == nil ? "未识别所选节点" : nil
+        lastMetadataError = nil
+        let nextEndpoint = value.endpoint
+        if selected?.selectedUUID != selectedUUID || nextEndpoint != endpoint {
+            clearSpeeds()
+            previousVPNCounter = nil
+            cancelProbe()
+            liveLatency = nil
+            liveLatencyAt = nil
+            lastProbeAt = nil
+            probeFailed = false
+            selectedUUID = selected?.selectedUUID
+            endpoint = nextEndpoint
+        }
+        snapshot.nodeName = selected?.nodeName
+        savedLatency = selected?.latencyMS
+        updateLatencyDisplay()
+        snapshot.groupName = selected == nil ? nil : "已选节点"
+        snapshot.profileName = selected?.profileName
+        snapshot.usedBytes = selected?.quota?.usedBytes
+        snapshot.totalBytes = selected?.quota?.totalBytes
+        snapshot.expiresAt = selected?.quota?.expiresAt
+        snapshot.subscriptionUpdatedAt = selected?.updatedAt
+        updateLatencyDisplay()
+        probeLatencyIfNeeded()
+    }
+
+    private func metadataFailed(_ error: Error) {
+        if let failure = error as? ShadowrocketReadError {
+            snapshot.metadataIssue = failure.message
+            if case let .file(domain, code) = failure {
+                let key = "\(domain):\(code)"
+                if key != lastMetadataError {
+                    metadataLog.error("Shadowrocket metadata read failed: \(key, privacy: .public)")
+                    lastMetadataError = key
+                }
+            }
+        } else { snapshot.metadataIssue = "节点数据读取失败" }
+        selectedUUID = nil
+        endpoint = nil
+        savedLatency = nil
+        liveLatency = nil
+        liveLatencyAt = nil
+        lastProbeAt = nil
+        probeFailed = false
+        cancelProbe()
+        snapshot.nodeName = nil
+        snapshot.latencyMS = nil
+        snapshot.latencyIsLive = false
+        snapshot.latencyKind = "保存的测速结果"
+        snapshot.groupName = nil
+        snapshot.profileName = nil
+        snapshot.usedBytes = nil
+        snapshot.totalBytes = nil
+        snapshot.expiresAt = nil
+        snapshot.subscriptionUpdatedAt = nil
     }
 
     private func probeLatencyIfNeeded() {

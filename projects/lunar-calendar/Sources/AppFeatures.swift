@@ -168,67 +168,6 @@ struct BirthdayEditor:View {
         busy=false
     }
 }
-struct DisplaySettings:View {
-    @ObservedObject var model:CalendarModel
-    @Environment(\.dismiss) var dismiss
-    @State private var draft:CalendarUserData
-    init(model:CalendarModel) {self.model=model;_draft=State(initialValue:model.data)}
-    func colorBinding(_ key:WritableKeyPath<CalendarTheme,String>)->Binding<Color> {
-        Binding(get:{Color(calendarHex:draft.theme[keyPath:key])},set:{value in
-            guard let c=NSColor(value).usingColorSpace(.deviceRGB) else {return}
-            draft.theme[keyPath:key]=String(format:"#%02X%02X%02X",Int(c.redComponent*255),Int(c.greenComponent*255),Int(c.blueComponent*255));draft.theme.name="自选配色"
-        })
-    }
-    var iconColor:Binding<Color> {
-        Binding(get:{Color(calendarHex:draft.menuIcon.color)},set:{value in
-            guard let c=NSColor(value).usingColorSpace(.deviceRGB) else {return}
-            draft.menuIcon.color=String(format:"#%02X%02X%02X",Int(c.redComponent*255),Int(c.greenComponent*255),Int(c.blueComponent*255))
-        })
-    }
-    var body:some View {
-        VStack(alignment:.leading,spacing:14) {
-            Text("显示与外观").font(.system(size:23,weight:.semibold))
-            Text("菜单栏图标").font(.system(size:13,weight:.semibold)).foregroundStyle(jade)
-            HStack(spacing:8) {
-                ForEach(MenuIconPreferences.choices,id:\.symbol) {choice in
-                    Button {draft.menuIcon.symbol=choice.symbol} label:{
-                        VStack(spacing:5) {
-                            Image(nsImage:MenuIconRenderer.image(MenuIconPreferences(symbol:choice.symbol,mode:draft.menuIcon.mode,color:draft.menuIcon.color))).frame(width:22,height:22)
-                            Text(choice.title).font(.system(size:11))
-                        }.frame(width:58,height:50).background(RoundedRectangle(cornerRadius:9).fill(draft.menuIcon.resolvedSymbol==choice.symbol ? jade.opacity(0.22) : .white.opacity(0.05)))
-                        .overlay(RoundedRectangle(cornerRadius:9).strokeBorder(draft.menuIcon.resolvedSymbol==choice.symbol ? jade : .clear))
-                    }.buttonStyle(.plain).focusEffectDisabled().accessibilityLabel(choice.title+"图标")
-                }
-            }
-            Picker("图标颜色",selection:$draft.menuIcon.mode) {
-                Text("跟随系统").tag("system");Text("自选颜色").tag("custom");Text("彩色图标").tag("colorful")
-            }.pickerStyle(.segmented)
-            if draft.menuIcon.mode=="custom" {ColorPicker("图标颜色",selection:iconColor,supportsOpacity:false)}
-            HStack(spacing:8) {
-                Image(nsImage:MenuIconRenderer.image(draft.menuIcon))
-                Text(draft.menuTitle(now:Date(),holidays:model.holidays).isEmpty ? "仅显示图标" : draft.menuTitle(now:Date(),holidays:model.holidays)).font(.system(size:12)).lineLimit(1)
-            }.padding(8).background(.white.opacity(0.07),in:RoundedRectangle(cornerRadius:8))
-            Button("自定义菜单栏文字、图标与颜色…") { NotificationCenter.default.post(name:Notification.Name("CalendarCustomizeMenu"),object:nil) }
-            Text("菜单栏显示项目").font(.system(size:13,weight:.semibold)).foregroundStyle(jade)
-            HStack(spacing:16) {Toggle("日期",isOn:$draft.showDate);Toggle("年份",isOn:$draft.showYear).disabled(!draft.showDate);Toggle("星期",isOn:$draft.showWeekday)}
-            HStack(spacing:16) {Toggle("农历",isOn:$draft.showLunar);Toggle("假期名称",isOn:$draft.showHoliday)}
-            Divider()
-            Text("背景配色").font(.system(size:13,weight:.semibold)).foregroundStyle(jade)
-            HStack(spacing:8) {ForEach(CalendarTheme.presets,id:\.name) {theme in Button {draft.theme=theme} label:{VStack(spacing:6) {RoundedRectangle(cornerRadius:9).fill(LinearGradient(colors:[Color(calendarHex:theme.start),Color(calendarHex:theme.glow).opacity(0.6)],startPoint:.bottomTrailing,endPoint:.topLeading)).frame(width:62,height:36).overlay(RoundedRectangle(cornerRadius:9).strokeBorder(draft.theme==theme ? jade : .white.opacity(0.2),lineWidth:1.5));Text(theme.name).font(.system(size:10))}}.buttonStyle(.plain)}}
-            HStack {ColorPicker("起始",selection:colorBinding(\.start),supportsOpacity:false);ColorPicker("结束",selection:colorBinding(\.end),supportsOpacity:false);ColorPicker("光晕",selection:colorBinding(\.glow),supportsOpacity:false)}
-            Text("同步用于窗口、菜单栏月历和桌面组件。").font(.system(size:11)).foregroundStyle(muted)
-            Toggle("登录时自动启动",isOn:Binding(get:{model.autoStart},set:{model.setAutoStart($0)}))
-            if !model.data.birthdays.isEmpty {
-                DisclosureGroup("已保存生日（\(model.data.birthdays.count)）") {
-                    ScrollView {VStack(alignment:.leading,spacing:9) {ForEach(model.data.birthdays) {birthday in HStack {VStack(alignment:.leading) {Text(birthday.name);Text(birthday.dateLabel).font(.system(size:10)).foregroundStyle(muted)};Spacer();Button {model.removeBirthday(birthday.id)} label:{Image(systemName:"trash")}.help("仅移除万年历记录，不删除通讯录生日")}}}}.frame(maxHeight:120)
-                }
-            }
-            if !model.storageNote.isEmpty {Text(model.storageNote).font(.system(size:11)).foregroundStyle(workRed)}
-            HStack {Button("取消") {dismiss()}.keyboardShortcut(.cancelAction);Spacer();Button("保存设置") {draft.birthdays=model.data.birthdays;draft.schedules=model.data.schedules;if model.apply(draft) {dismiss()}}.buttonStyle(.borderedProminent).tint(jade).keyboardShortcut(.defaultAction)}
-        }.padding(26).frame(width:460).background(CalendarBackground()).environment(\.calendarData,draft).foregroundStyle(.white).preferredColorScheme(.dark).environment(\.locale,Locale(identifier:"zh_CN"))
-    }
-}
-
 struct ScheduleEditor:View {
     @ObservedObject var model:CalendarModel
     @Environment(\.dismiss) var dismiss

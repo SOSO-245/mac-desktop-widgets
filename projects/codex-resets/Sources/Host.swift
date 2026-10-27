@@ -64,7 +64,7 @@ struct ResetManagerView: View {
                 .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
 
                 HStack {
-                    Text("桌面小组件预览")
+                    Text("桌面卡片与小组件预览")
                         .font(.system(size: 16, weight: .semibold))
                     Spacer()
                     Toggle("显示示例", isOn: $showingSamples)
@@ -80,6 +80,7 @@ struct ResetManagerView: View {
                     preview(.large, label: "大号")
                 }
 
+                if showingSamples {Text("示例感谢数仅用于演示；点击红色爱心查看飘散效果，不会发送真实点赞。动态飘心用于桌面卡片和菜单栏浮窗。").font(.system(size:12)).foregroundStyle(.secondary)}
                 VStack(alignment: .leading, spacing: 7) {
                     Label("添加到桌面", systemImage: "plus.rectangle.on.rectangle")
                         .font(.system(size: 13, weight: .semibold))
@@ -112,9 +113,15 @@ struct ResetPreviewCard: View {
     let snapshot: ResetSnapshot
     let size: CardSize
     let now: Date
+    @StateObject private var demoReactions=LiveReactions(demo:true)
+    @State private var demoAcknowledged=false
 
     var body: some View {
-        ResetCard(snapshot: snapshot, size: size, now: now)
+        ResetCard(snapshot: snapshot, size: size, now: now,activity:snapshot.isSample ? AnyView(ReactionBadge(feed:demoReactions,compact:size == .small)):nil,
+                  acknowledge:snapshot.isSample && !demoAcknowledged ? {demoAcknowledged=true}:nil)
+            .overlayPreferenceValue(ReactionOriginKey.self) {origin in if snapshot.isSample {ReactionHearts(feed:demoReactions,origin:origin)}}
+            .onChange(of:snapshot.isSample,initial:true) {_,sample in demoReactions.setActive(sample);demoAcknowledged=false}
+            .onDisappear {demoReactions.setActive(false)}
             .background(ResetBackground())
             .clipShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
             .frame(width: size.width, height: size.height)
@@ -129,6 +136,9 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
     private let store = ResetViewModel()
     private var statusItem: NSStatusItem?
     private let statusPopover=StatusPopover()
+    private let desktopCard=LiveDesktopCard()
+    private let reactions=LiveReactions()
+    private lazy var desktopReactions=DesktopReactionOverlay(feed:reactions)
     private var displayTimer: Timer?
     private var maintenanceTimer: Timer?
     private var maintenanceTask: Task<Void, Never>?
@@ -145,13 +155,14 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
         WidgetSelfRepair.shared.start()
         installMenu()
         installStatusItem()
+        configureSettings()
         maintainData()
         displayTimer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.updateStatusItem() }
         }
         if let displayTimer { RunLoop.main.add(displayTimer, forMode: .common) }
         WidgetCenter.shared.reloadTimelines(ofKind: resetsWidgetKind)
-        maintenanceTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+        maintenanceTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.maintainData() }
         }
         // Window creation belongs to a normal application-open event, not launch.
@@ -173,6 +184,8 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
         displayTimer?.invalidate()
         maintenanceTimer?.invalidate()
         maintenanceTask?.cancel()
+        reactions.setActive(false)
+        desktopReactions.setActive(false)
     }
 
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
@@ -198,6 +211,7 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let destination = urls.compactMap({ ResetNavigation.websiteDestination(for: $0) }).first else { return }
         managerWindow?.orderOut(nil)
+        AppSettingsController.shared.close()
         navigationLog.notice("Widget website route; management visible: \(self.managerWindow?.isVisible ?? false)")
         guard NSWorkspace.shared.open(destination) else {
             let alert = NSAlert()
@@ -210,6 +224,7 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showManager() {
         statusPopover.close()
+        AppSettingsController.shared.close()
         if managerWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 824, height: 720),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -235,31 +250,54 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         for (title, action) in [("管理与预览…", #selector(showManager)),
                                 ("打开重置网站", #selector(openWebsite)),
-                                ("刷新重置数据", #selector(refreshStatus)),
-                                ("菜单栏显示与配色…", #selector(customizeMenu))] {
+                                ("刷新重置数据", #selector(refreshStatus))] {
             let entry = NSMenuItem(title:title,action:action,keyEquivalent:"")
             entry.target = self; menu.addItem(entry)
         }
         menu.addItem(.separator())
         menu.addItem(withTitle:"退出 Codex 重置",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"")
+        AppSettingsController.shared.installMenuItem(in:menu)
         statusItem = item
         statusPopover.attach(to:item,menu:menu,size:NSSize(width:344,height:344),openTitle:"管理与预览",
-            open:{[weak self] in self?.showManager()},content:{[weak self] in
+            open:{[weak self] in self?.showManager()},desktopOptions:true,content:{[weak self] native in
                 guard let self else{return AnyView(EmptyView())}
-                return AnyView(ResetCard(snapshot:self.store.snapshot,size:.large,now:Date(),
-                    refresh:AnyView(Button(action:{[weak self] in self?.refreshStatus()}){Image(systemName:"arrow.clockwise")}.buttonStyle(.plain)))
-                    .background(ResetBackground()).clipShape(RoundedRectangle(cornerRadius:23)).containerShape(RoundedRectangle(cornerRadius:23,style:.continuous)).environment(\.colorScheme,.dark))
+                return AnyView(ResetCard(menuSurface:native,snapshot:self.store.snapshot,size:.large,now:Date(),
+                    refresh:AnyView(Button(action:{[weak self] in self?.refreshStatus()}){Image(systemName:"arrow.clockwise")}.buttonStyle(.plain)),activity:AnyView(ReactionBadge(feed:self.reactions)),liveWebsite:resetsWebsite,acknowledge:self.acknowledgementAction())
+                    .overlayPreferenceValue(ReactionOriginKey.self) {origin in ReactionHearts(feed:self.reactions,origin:origin)}
+                    .background{if !native{ResetBackground()}}.clipShape(RoundedRectangle(cornerRadius:23)).containerShape(RoundedRectangle(cornerRadius:23,style:.continuous)).environment(\.colorScheme,.dark))
             })
+        desktopCard.start(title:"Codex 重置",menu:menu,refresh:{[weak self] in self?.refreshStatus()}) {[weak self] size,plain,controls in
+            guard let self else {return AnyView(EmptyView())}
+            let family:CardSize = size=="small" ? .small:size=="large" ? .large:.medium
+            return AnyView(ResetCard(menuSurface:plain,desktopSurface:true,snapshot:self.store.snapshot,size:family,now:Date(),refresh:controls,activity:AnyView(ReactionBadge(feed:self.reactions,compact:family == .small)),liveWebsite:resetsWebsite,acknowledge:self.acknowledgementAction())
+                .background {if !plain {ResetBackground()}}.overlayPreferenceValue(ReactionOriginKey.self) {origin in
+                    DesktopReactionOrigin(origin:origin,report:{[weak self] point in self?.desktopReactions.setOrigin(point)})
+                })
+        }
+        desktopCard.changed = {[weak self] in self?.updateReactionVisibility()}
+        statusPopover.visibilityChanged = {[weak self] in self?.updateReactionVisibility()}
         updateStatusItem()
     }
+    private func acknowledgementAction()->(()->Void)? {
+        let prefs=UserDefaults.standard
+        guard let key=ResetAttention.pendingKey(snapshot:store.snapshot,now:Date(),acknowledged:prefs.stringArray(forKey:"resetPlan.acknowledged") ?? []) else{return nil}
+        return {[weak self] in
+            prefs.set(ResetAttention.acknowledging(key,in:prefs.stringArray(forKey:"resetPlan.acknowledged") ?? []),forKey:"resetPlan.acknowledged")
+            self?.updateStatusItem()
+        }
+    }
+    private func updateReactionVisibility() {
+        reactions.setActive(desktopCard.visible || statusPopover.isShown)
+        desktopReactions.setActive(desktopCard.visible)
+    }
     private func updateStatusItem() {
-        statusPopover.update()
+        statusPopover.update();desktopCard.update();updateReactionVisibility()
         guard let button = statusItem?.button else { return }
         let display = ResetMenuDisplay.make(snapshot:store.snapshot,now:Date())
         let color:NSColor
         switch display.tone {
         case .green: color = NSColor(srgbRed:0.40,green:1,blue:0.68,alpha:1)
-        case .pink: color = NSColor(srgbRed:1,green:0.43,blue:0.76,alpha:1)
+        case .pink: color = NSColor(srgbRed:1,green:0.59,blue:0.24,alpha:1)
         case .neutral: color = .white
         }
         button.attributedTitle = NSAttributedString(string:" " + display.text,attributes:[
@@ -268,7 +306,7 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
         if let deadline = store.snapshot.status?.scheduledReset?.scheduledFor {
             tooltip += "\n计划时间：" + deadline.formatted(date:.complete,time:.standard)
         }
-        tooltip += "\n" + store.snapshot.freshness(at:Date()) + " · 显示每秒更新，公共数据每 5 分钟检查"
+        tooltip += "\n" + store.snapshot.freshness(at:Date()) + " · 显示每秒更新，公共数据每分钟检查"
         button.toolTip = tooltip; button.setAccessibilityLabel("Codex 重置 " + display.text)
         button.image=NSImage(systemSymbolName:"clock.arrow.circlepath",accessibilityDescription:nil);button.imagePosition = .imageLeading
         MenuCustomizationPanel.apply(button,fields:customMenuFields(),icon:button.image)
@@ -276,19 +314,50 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
     private func customMenuFields()->[MenuField] {
         let snapshot=store.snapshot,display=ResetMenuDisplay.make(snapshot:store.snapshot,now:Date())
         let key=display.tone == .green ? "elapsed" : display.tone == .pink ? "planned" : "neutral"
-        let color=MenuCustomization.color(key == "elapsed" ? "#66FFAD" : key == "planned" ? "#FF6EC2" : "#FFFFFF")
+        let color=MenuCustomization.color(key == "elapsed" ? "#66FFAD" : key == "planned" ? "#FF963D" : "#FFFFFF")
         let last=snapshot.status?.stats.lastResetAt ?? snapshot.status?.latestReset?.announcedAt ?? snapshot.history.map(\.announcedAt).max()
         return [MenuField(id:"timer",title:"重置计时 / 状态",value:display.text,color:color,colorKey:key),
                 MenuField(id:"name",title:"应用名称",value:"Codex 重置",defaultVisible:false),
                 MenuField(id:"last",title:"上次重置日期",value:last?.formatted(date:.abbreviated,time:.shortened) ?? "—",defaultVisible:false),
                 MenuField(id:"clock",title:"当前时间",value:Date().formatted(date:.omitted,time:.shortened),defaultVisible:false)]
     }
-    @objc private func customizeMenu() {
-        statusPopover.close()
-        MenuCustomizationPanel.shared.show(title:"Codex 重置",fields:customMenuFields(),icon:NSImage(systemSymbolName:"clock.arrow.circlepath",accessibilityDescription:nil),extraColors:[("elapsed","无计划：经过时间",MenuCustomization.color("#66FFAD")),("planned","有计划：倒计时",MenuCustomization.color("#FF6EC2")),("neutral","未知 / 缓存状态",.white)]) { [weak self] in self?.updateStatusItem() }
+    private func configureSettings() {
+        ToolboxBridge.shared.start(show:{[weak self] visible in self?.desktopCard.setHidden(!visible)},size:{[weak self] value in self?.desktopCard.setSize(value)})
+        AppSettingsController.shared.configure(title:"Codex 重置",pages:[
+            AppSettingsPage(id:"toolbox",title:"桌面排列",symbol:"square.grid.2x2") {AnyView(ToolboxSettingsLink())},
+            AppSettingsPage(id:"general",title:"通用",symbol:"gearshape") { [weak self] in
+                AnyView(VStack(alignment:.leading,spacing:18) {
+                    Text("Codex 重置").font(.headline)
+                    Text("显示公共重置记录与计划提醒；计时每秒更新，公共数据每分钟检查。").foregroundStyle(.secondary)
+                    HStack {
+                        Button("管理与预览…") {self?.showManager()}
+                        Button("打开重置网站") {self?.openWebsite()}
+                        Button("立即刷新") {self?.refreshStatus()}
+                    }
+                    Text("桌面卡片与菜单栏分别设置，关闭设置窗口后会继续更新。").font(.callout).foregroundStyle(.secondary)
+                })
+            },
+            AppSettingsPage(id:"desktop",title:"桌面卡片",symbol:"rectangle.on.rectangle") { [weak self] in
+                guard let self else {return AnyView(EmptyView())}
+                return AnyView(VStack(alignment:.leading,spacing:24) {
+                    self.desktopCard.settingsContent
+                    Divider()
+                    DesktopAppearanceSettings(model:.shared)
+                })
+            },
+            AppSettingsPage(id:"menubar",title:"菜单栏",symbol:"menubar.rectangle") { [weak self] in
+                guard let self else {return AnyView(EmptyView())}
+                return AnyView(VStack(alignment:.leading,spacing:24) {
+                    self.statusPopover.settingsContent
+                    Divider()
+                    MenuCustomizationView(fields:self.customMenuFields(),fallback:NSImage(systemSymbolName:"clock.arrow.circlepath",accessibilityDescription:nil),extraColors:[("elapsed","无计划：经过时间",MenuCustomization.color("#66FFAD")),("planned","有计划：倒计时",MenuCustomization.color("#FF963D")),("neutral","未知 / 缓存状态",.white)]) { [weak self] in self?.updateStatusItem() }
+                })
+            },
+            AppSettingsPage(id:"updates",title:"更新与版本",symbol:"arrow.down.circle") {AppUpdater.shared.settingsContent}
+        ],beforeShow:{[weak self] in self?.statusPopover.close()})
     }
     @objc private func openWebsite() {
-        statusPopover.close(); NSWorkspace.shared.open(resetsWebsite) }
+        statusPopover.close();AppSettingsController.shared.close();NSWorkspace.shared.open(resetsWebsite) }
     @objc private func refreshStatus() {
         Task { await store.refresh(force:true); updateStatusItem() }
     }
@@ -297,12 +366,13 @@ final class ResetAppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu(title: "Codex 重置")
-        let managerItem = NSMenuItem(title: "管理与预览…", action: #selector(showManager), keyEquivalent: ",")
+        let managerItem = NSMenuItem(title: "管理与预览…", action: #selector(showManager), keyEquivalent: "")
         managerItem.target = self
         appMenu.addItem(managerItem)
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "隐藏 Codex 重置", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "退出 Codex 重置", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        AppSettingsController.shared.installMenuItem(in:appMenu)
         appItem.submenu = appMenu
         menu.addItem(appItem)
         let windowItem = NSMenuItem()

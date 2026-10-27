@@ -6,6 +6,7 @@ import Darwin
     private var process:Process?, timer:Timer?, pipe:Pipe?
     private var pending=Data(), network=NetworkRate(), lastStart=Date.distantPast
     private var running=false
+    private var thermalMood=ThermalMoodFilter()
     func start(){running=true;launch();timer=Timer.scheduledTimer(withTimeInterval:2,repeats:true){[weak self] _ in Task{@MainActor in guard let self else{return};if Date().timeIntervalSince(self.snapshot.date)>10 {self.snapshot.message="等待采集恢复";self.onUpdate?(self.snapshot);if Date().timeIntervalSince(self.lastStart)>15{self.launch()}}}}}
     private func launch(){
         guard running else{return};stopProcess();lastStart=Date();pending=Data();network=NetworkRate()
@@ -24,6 +25,8 @@ import Darwin
         while let i=pending.firstIndex(of:10){let line=Data(pending[..<i]);pending.removeSubrange(...i)
             guard var m=try? Metrics.parse(line) else{continue}
             let speeds=network.update(Self.counters(),at:ProcessInfo.processInfo.systemUptime);m.download=speeds.0;m.upload=speeds.1
+            m.thermalState=ProcessInfo.processInfo.thermalState.rawValue
+            m.temperatureDisplayMood=thermalMood.update(temperature:m.cpuTemp,system:m.thermalState,at:ProcessInfo.processInfo.systemUptime)
             m.history=Array((snapshot.history+[m.power ?? 0]).suffix(60));snapshot=m;onUpdate?(m)
         }
     }

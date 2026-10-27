@@ -16,7 +16,7 @@ private final class CardPanel: NSPanel {
             // SwiftUI's text and chart subviews consume the background drag.
             // Handle dragging at the panel, leaving the header controls intact.
             let inHeader = point.y >= size.height - 40 && point.y <= size.height - 12
-            let onControl = inHeader && (point.x <= 42 || point.x >= size.width - 89)
+            let onControl = inHeader && (point.x <= 42 || point.x >= size.width - (cardSize == .small ? 42:65))
             let inSiteList = cardSize == .large && point.y < size.height - 164
             let fromTop = size.height - point.y
             let inSpeeds = point.x >= 14 && point.x <= size.width - 14
@@ -32,7 +32,7 @@ private final class CardPanel: NSPanel {
     }
 }
 
-private final class CardHostingView: NSHostingView<FlClashCard> {
+private final class CardHostingView: NSHostingView<AnyView> {
     override var mouseDownCanMoveWindow: Bool { false }
 }
 
@@ -49,7 +49,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let statusPopover = StatusPopover()
     private var lastStatusDisplayKey: String?
     private var observer: Any?
-    private var menuSettingsWindow: NSWindow?
+    private let nodePicker = NodePickerWindowController()
     private var menuOptions = MenuBarOptions.load()
     private var subscriptions = Set<AnyCancellable>()
     private var alwaysOnTop = UserDefaults.standard.bool(forKey: "alwaysOnTop")
@@ -81,21 +81,22 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             panel.center()
         }
-        host = CardHostingView(rootView: card())
+        host = CardHostingView(rootView: desktopCard())
         panel.contentView = host
         panel.setFrameAutosaveName("FlClashLiveCardFrame")
         panel.saveFrame(usingName: "FlClashLiveCardFrame")
         updateLevel()
         monitor.$snapshot.receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self else { return }
-            self.host.rootView = self.card()
+            self.host.rootView = self.desktopCard()
             self.configureSites()
             self.updateStatus()
         }.store(in: &subscriptions)
+        configureSettings()
         createMenu()
         sites.objectWillChange.receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self else { return }
-            self.host.rootView = self.card(); self.updateStatus()
+            self.host.rootView = self.desktopCard(); self.updateStatus()
         }.store(in: &subscriptions)
         monitor.start()
         configureSites()
@@ -107,8 +108,8 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         ) { [weak self] _ in Task { @MainActor in self?.refresh() } }
     }
 
-    private func card(preview: Bool = false) -> FlClashCard {
-        FlClashCard(size: preview ? .large : size, siteReadings: sites.readings, siteRoute: sites.routeLabel,
+    private func card(preview: Bool = false, native: Bool = false) -> FlClashCard {
+        FlClashCard(menuSurface:native, size: preview ? .large : size, siteReadings: sites.readings, siteRoute: sites.routeLabel,
                     onSize: { [weak self] in self?.setSize($0) },
                     menuSite: menuSite, onMenuSite: { [weak self] in self?.setMenuSite($0) },
                     onSiteRefresh: { [weak self] in self?.sites.refresh(siteID: $0) },
@@ -118,8 +119,105 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     onRefresh: { [weak self] in self?.refresh() },
                     onToggleTop: { [weak self] in self?.toggleTop() },
                     onToggleLock: { [weak self] in self?.toggleLock() },
-                    onQuit: { NSApp.terminate(nil) }, onMenuSettings:{ [weak self] in self?.showMenuSettings() },
-                    onTrafficScope: { [weak self] in self?.setTrafficScope($0) })
+                    onQuit: { NSApp.terminate(nil) }, onMenuSettings:{ [weak self] in self?.showAppSettings() },
+                    onTrafficScope: { [weak self] in self?.setTrafficScope($0) },onAppearance:{ AppSettingsController.shared.show("desktop") },
+                    onChooseNode: { [weak self] in self?.showNodePicker() })
+    }
+
+    private func desktopCard()->AnyView {
+        AnyView(DesktopCardSurface(original:card(),plain:card(native:true)))
+    }
+
+    private func configureSettings() {
+        ToolboxBridge.shared.start(show:{[weak self] visible in guard let self, self.cardVisible != visible else{return}; if visible{self.showCard()}else{self.hideCard()}},size:{[weak self] value in if let s=CardSize(rawValue:value){self?.setSize(s)}})
+        AppSettingsController.shared.configure(title: "FlClash 实时卡片", pages: [
+            AppSettingsPage(id:"toolbox",title:"桌面排列",symbol:"square.grid.2x2") {AnyView(ToolboxSettingsLink())},
+            AppSettingsPage(id: "general", title: "通用", symbol: "gearshape", content: { [weak self] in self?.generalSettings() ?? AnyView(EmptyView()) }),
+            AppSettingsPage(id: "desktop", title: "桌面与浮窗", symbol: "rectangle.on.rectangle", content: { [weak self] in self?.desktopSettings() ?? AnyView(EmptyView()) }),
+            AppSettingsPage(id: "menubar", title: "菜单栏", symbol: "menubar.rectangle", content: { [weak self] in self?.menuBarSettings() ?? AnyView(EmptyView()) }),
+            AppSettingsPage(id: "connection", title: "数据与测速", symbol: "network", content: { [weak self] in self?.connectionSettings() ?? AnyView(EmptyView()) }),
+            AppSettingsPage(id: "updates", title: "软件更新", symbol: "arrow.triangle.2.circlepath", content: { AppUpdater.shared.settingsContent })
+        ], beforeShow: { [weak self] in self?.statusPopover.close() })
+    }
+
+    private func settingsBinding<Value>(get: @escaping @MainActor @Sendable () -> Value, set: @escaping @MainActor @Sendable (Value) -> Void) -> Binding<Value> {
+        Binding(get: get, set: set)
+    }
+
+    private func generalSettings() -> AnyView {
+        AnyView(VStack(alignment: .leading, spacing: 18) {
+            Toggle("登录时启动", isOn: settingsBinding(get: { SMAppService.mainApp.status == .enabled }, set: { value in
+                if value != (SMAppService.mainApp.status == .enabled) { self.toggleLogin() }
+            }))
+            Text("登录 Mac 后自动启动实时卡片，保留当前的显示方式。").foregroundStyle(.secondary)
+            if SMAppService.mainApp.status == .requiresApproval {
+                Button("在系统设置中允许登录启动") { SMAppService.openSystemSettingsLoginItems() }
+            }
+            Divider()
+            LabeledContent("当前数据来源", value: monitor.client.title)
+            Text("数据来源、网速统计和延迟目标可在“数据与测速”中调整。").font(.callout).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading))
+    }
+
+    private func desktopSettings() -> AnyView {
+        AnyView(VStack(alignment: .leading, spacing: 18) {
+            Toggle("显示桌面卡片", isOn: settingsBinding(get: { self.cardVisible }, set: { value in
+                if value != self.cardVisible { value ? self.showCard() : self.hideCard() }
+            }))
+            Picker("卡片尺寸", selection: settingsBinding(get: { self.size }, set: { self.setSize($0) })) {
+                ForEach(CardSize.allCases, id: \.self) { Text($0.title).tag($0) }
+            }.pickerStyle(.segmented)
+            Toggle("置于其他窗口上方", isOn: settingsBinding(get: { self.alwaysOnTop }, set: { value in
+                if value != self.alwaysOnTop { self.toggleTop() }
+            }))
+            Toggle("锁定卡片位置", isOn: settingsBinding(get: { self.positionLocked }, set: { value in
+                if value != self.positionLocked { self.toggleLock() }
+            }))
+            Button("移到屏幕中央") { self.centerCard() }
+            Divider()
+            DesktopAppearanceSettings(model: .shared)
+            Divider()
+            statusPopover.settingsContent
+        }.frame(maxWidth: .infinity, alignment: .leading))
+    }
+
+    private func menuBarSettings() -> AnyView {
+        AnyView(VStack(alignment: .leading, spacing: 22) {
+            MenuBarSettingsView(onSave: { [weak self] value in
+                self?.menuOptions = value; self?.lastStatusDisplayKey = nil; self?.updateStatus()
+            })
+            Divider()
+            Text("高级文字与图标").font(.headline)
+            Text("启用高级样式后，菜单栏采用下方的显示内容与文字；关闭后恢复上方的基础显示。").font(.callout).foregroundStyle(.secondary)
+            MenuCustomizationView(fields: customMenuFields(), fallback: ProbeSite.icon(menuSite),
+                                  extraColors: [("fast", "常规延迟", MenuCustomization.color("#66FFAD")),
+                                                ("slow", "超过 2000 ms", MenuCustomization.color("#FF6EC2"))],
+                                  onSave: { [weak self] in self?.lastStatusDisplayKey = nil; self?.updateStatus() })
+        }.frame(maxWidth: .infinity, alignment: .leading))
+    }
+
+    private func connectionSettings() -> AnyView {
+        AnyView(VStack(alignment: .leading, spacing: 18) {
+            Picker("数据来源", selection: settingsBinding(get: { self.monitor.client }, set: { value in
+                if value != self.monitor.client { self.switchClient() }
+            })) {
+                ForEach(ProxyClient.allCases, id: \.self) { Text($0.title).tag($0) }
+            }.pickerStyle(.segmented)
+            if monitor.client == .flclash {
+                Picker("网速统计", selection: settingsBinding(get: { TrafficScope.load() }, set: { self.setTrafficScope($0) })) {
+                    ForEach(TrafficScope.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+            } else {
+                LabeledContent("网速统计", value: "隧道总流量")
+            }
+            Text(monitor.snapshot.trafficHint).font(.callout).foregroundStyle(.secondary)
+            Divider()
+            Picker("菜单栏延迟目标", selection: settingsBinding(get: { self.menuSite }, set: { self.setMenuSite($0) })) {
+                ForEach(ProbeSite.all) { Text($0.id).tag($0.id) }
+            }
+            Button("节点选择与测速…") { self.showNodePicker() }
+            Button("刷新数据与测速") { self.refresh() }
+        }.frame(maxWidth: .infinity, alignment: .leading))
     }
 
     private func createMenu() {
@@ -134,40 +232,14 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         add("显示卡片", #selector(showCard))
         add("打开当前软件", #selector(openFlClash))
         add("切换 FlClash / Shadowrocket", #selector(switchClient))
-        add("菜单栏显示", #selector(showMenuSettings))
-        add("菜单栏文字与图标…", #selector(customizeMenu))
+        add("节点选择与测速…", #selector(showNodePicker))
         add("刷新数据", #selector(refresh))
-        let sizes = NSMenuItem(title: "卡片尺寸", action: nil, keyEquivalent: "")
-        sizes.submenu = NSMenu()
-        for option in CardSize.allCases {
-            let item = NSMenuItem(title: option.title, action: #selector(selectSize(_:)), keyEquivalent: "")
-            item.target = self; item.representedObject = option.rawValue
-            item.state = size == option ? .on : .off; sizes.submenu?.addItem(item)
-        }
-        menu.addItem(sizes)
-        let traffic = NSMenuItem(title: "网速统计", action: nil, keyEquivalent: "")
-        traffic.submenu = NSMenu(); menu.addItem(traffic)
-        let latency = NSMenuItem(title: "状态栏延迟站点", action: nil, keyEquivalent: "")
-        latency.submenu = NSMenu()
-        for site in ProbeSite.all.prefix(6) {
-            let item = NSMenuItem(title: site.id, action: #selector(selectSite(_:)), keyEquivalent: "")
-            item.target = self; item.representedObject = site.id
-            item.image = ProbeSite.icon(site.id)
-            item.state = site.id == menuSite ? .on : .off; latency.submenu?.addItem(item)
-        }
-        menu.addItem(latency)
-        add("登录时启动", #selector(toggleLogin))
-        menu.items.last?.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(.separator())
-        add(alwaysOnTop ? "✓ 置于其他窗口上方" : "置于其他窗口上方", #selector(toggleTop))
-        add(positionLocked ? "解锁位置" : "锁定位置", #selector(toggleLock))
-        add("卡片移到屏幕中央", #selector(centerCard))
         add("隐藏卡片", #selector(hideCard))
         menu.addItem(.separator())
         add("退出实时卡片", #selector(quit))
         statusPopover.attach(to:statusItem,menu:menu,size:CardSize.large.dimensions,openTitle:"显示桌面卡片",
-            open:{ [weak self] in self?.showCard() },content:{ [weak self] in
-                guard let self else{return AnyView(EmptyView())};return AnyView(self.card(preview:true))
+            open:{ [weak self] in self?.showCard() },desktopOptions:true,content:{ [weak self] native in
+                guard let self else{return AnyView(EmptyView())};return AnyView(self.card(preview:true,native:native))
             })
         statusPopover.visibilityChanged = { [weak self] in self?.configureSites() }
         updateVisibilityMark()
@@ -194,15 +266,24 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setTrafficScope(scope)
     }
     private func setTrafficScope(_ scope: TrafficScope) {
-        monitor.setTrafficScope(scope); updateTrafficMenu(); host.rootView = card(); updateStatus()
+        defer { AppSettingsController.shared.refresh() }
+        monitor.setTrafficScope(scope); updateTrafficMenu(); host.rootView = desktopCard(); updateStatus()
     }
 
     private func updateLevel() {
         panel.level = alwaysOnTop ? .floating : NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
     }
+    @objc private func showNodePicker() {
+        statusPopover.close()
+        nodePicker.show(client: monitor.client, preferredGroup: monitor.snapshot.groupName) { [weak self] in
+            self?.monitor.refresh()
+            self?.configureSites()
+        }
+    }
     @objc private func showCard() { cardVisible = true; UserDefaults.standard.set(false,forKey:"cardHidden"); updateVisibilityMark(); configureSites(); panel.orderFrontRegardless() }
     @objc private func hideCard() { if !cardVisible { showCard(); return }; cardVisible = false; UserDefaults.standard.set(true,forKey:"cardHidden"); updateVisibilityMark(); configureSites(); panel.orderOut(nil) }
     private func updateVisibilityMark() {
+        defer { AppSettingsController.shared.refresh() }
         statusPopover.menu.items.first(where: { $0.action == #selector(hideCard) })?.state = cardVisible ? .off : .on
         statusPopover.menu.items.first(where: { $0.action == #selector(showCard) })?.state = cardVisible ? .on : .off
     }
@@ -228,28 +309,16 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 MenuField(id:"download",title:"下载速度",value:MenuBarDisplay.rate(s.downloadBps),color:.cyan,defaultVisible:false),
                 MenuField(id:"upload",title:"上传速度",value:MenuBarDisplay.rate(s.uploadBps),color:.systemPurple,defaultVisible:false)]
     }
-    @objc private func customizeMenu() {
-        statusPopover.close()
-        MenuCustomizationPanel.shared.show(title:monitor.snapshot.client.title,fields:customMenuFields(),icon:ProbeSite.icon(menuSite),extraColors:[("fast","常规延迟",MenuCustomization.color("#66FFAD")),("slow","超过 2000 ms",MenuCustomization.color("#FF6EC2"))]) { [weak self] in
-            self?.lastStatusDisplayKey=nil;self?.updateStatus()
-        }
-    }
-    @objc private func showMenuSettings() {
-        statusPopover.close()
-        if menuSettingsWindow == nil {
-            menuSettingsWindow = NSWindow(contentRect:NSRect(x:0,y:0,width:510,height:580),styleMask:[.titled,.closable],backing:.buffered,defer:false)
-            menuSettingsWindow?.title="VPN 卡片 · 菜单栏显示"; menuSettingsWindow?.isReleasedWhenClosed=false
-            menuSettingsWindow?.contentView=NSHostingView(rootView:MenuBarSettingsView(onSave:{ [weak self] value in
-                self?.menuOptions=value; self?.lastStatusDisplayKey=nil; self?.updateStatus(); self?.menuSettingsWindow?.orderOut(nil)
-            }));menuSettingsWindow?.center()
-        }
-        menuSettingsWindow?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
-    }
+    @objc private func showAppSettings() { AppSettingsController.shared.show() }
+    @objc private func customizeMenu() { AppSettingsController.shared.show("menubar") }
+    @objc private func showMenuSettings() { AppSettingsController.shared.show("menubar") }
     @objc private func switchClient() {
+        defer { AppSettingsController.shared.refresh() }
+        nodePicker.close()
         statusPopover.close()
         monitor.switchClient()
         updateTrafficMenu()
-        host.rootView = card()
+        host.rootView = desktopCard()
         openFlClash()
     }
     @objc private func refresh() { monitor.refresh(); sites.refresh() }
@@ -260,6 +329,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let raw = item.representedObject as? String, let option = CardSize(rawValue: raw) { setSize(option) }
     }
     private func setSize(_ option: CardSize) {
+        defer { AppSettingsController.shared.refresh() }
         size = option; panel.cardSize = size
         UserDefaults.standard.set(size.rawValue, forKey: "cardSize")
         let dimensions = size.dimensions, old = panel.frame
@@ -268,7 +338,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             frame.origin.x = max(visible.minX, min(frame.minX, visible.maxX - frame.width))
             frame.origin.y = max(visible.minY, min(frame.minY, visible.maxY - frame.height))
         }
-        host.rootView = card()
+        host.rootView = desktopCard()
         panel.setFrame(frame, display: true)
         panel.saveFrame(usingName: "FlClashLiveCardFrame")
         statusPopover.menu.items.first(where: { $0.title == "卡片尺寸" })?.submenu?.items.forEach {
@@ -281,13 +351,14 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setMenuSite(value)
     }
     private func setMenuSite(_ value: String) {
+        defer { AppSettingsController.shared.refresh() }
         guard ProbeSite.all.contains(where: { $0.id == value }) else { return }
         menuSite = value
         UserDefaults.standard.set(value, forKey: "menuLatencySite")
         statusPopover.menu.items.first(where: { $0.title == "状态栏延迟站点" })?.submenu?.items.forEach {
             $0.state = ($0.representedObject as? String) == value ? .on : .off
         }
-        configureSites(); updateStatus(); host.rootView = card()
+        configureSites(); updateStatus(); host.rootView = desktopCard()
     }
     private func updateStatus() {
         statusPopover.update()
@@ -312,6 +383,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         MenuCustomizationPanel.apply(button,fields:customMenuFields(),icon:ProbeSite.icon(menuSite))
     }
     @objc private func toggleLogin() {
+        defer { AppSettingsController.shared.refresh() }
         do {
             if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
             else { try SMAppService.mainApp.register() }
@@ -323,31 +395,34 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     @objc private func toggleLock() {
+        defer { AppSettingsController.shared.refresh() }
         positionLocked.toggle()
         UserDefaults.standard.set(positionLocked, forKey: "positionLocked")
         panel.positionLocked = positionLocked
         panel.isMovable = !positionLocked
         panel.isMovableByWindowBackground = false
         panel.saveFrame(usingName: "FlClashLiveCardFrame")
-        host.rootView = card()
+        host.rootView = desktopCard()
         if let item = statusPopover.menu.items.first(where: { $0.action == #selector(toggleLock) }) {
             item.title = positionLocked ? "解锁位置" : "锁定位置"
         }
     }
     @objc private func toggleTop() {
+        defer { AppSettingsController.shared.refresh() }
         alwaysOnTop.toggle()
         UserDefaults.standard.set(alwaysOnTop, forKey: "alwaysOnTop")
-        updateLevel(); host.rootView = card()
+        updateLevel(); host.rootView = desktopCard()
         if let item = statusPopover.menu.items.first(where: { $0.action == #selector(toggleTop) }) {
             item.title = alwaysOnTop ? "✓ 置于其他窗口上方" : "置于其他窗口上方"
         }
-        panel.orderFrontRegardless()
+        if cardVisible { panel.orderFrontRegardless() }
     }
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showCard(); return false
     }
     func applicationWillTerminate(_ notification: Notification) {
+        nodePicker.close()
         panel?.saveFrame(usingName: "FlClashLiveCardFrame")
         sites.stop()
         monitor.stop()

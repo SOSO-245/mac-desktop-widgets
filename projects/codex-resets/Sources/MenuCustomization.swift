@@ -25,8 +25,8 @@ struct MenuCustomization:Codable,Equatable {
     var iconColor="#66FFAD"
     var fontSize:Double=12
     static let key="customMenuAppearance.v1"
-    static func load()->Self { UserDefaults.standard.data(forKey:key).flatMap { try? JSONDecoder().decode(Self.self,from:$0) } ?? Self() }
-    func save() { UserDefaults.standard.set(try? JSONEncoder().encode(self),forKey:Self.key) }
+    static func load(defaults:UserDefaults = .standard)->Self { defaults.data(forKey:key).flatMap { try? JSONDecoder().decode(Self.self,from:$0) } ?? Self() }
+    func save(defaults:UserDefaults = .standard) { defaults.set(try? JSONEncoder().encode(self),forKey:Self.key) }
     func shown(_ f:MenuField)->Bool { visible[f.id] ?? f.defaultVisible }
     func text(_ f:MenuField)->String { String((labels[f.id] ?? "{值}").prefix(60)).replacingOccurrences(of:"{值}",with:f.value) }
     static func color(_ hex:String,fallback:NSColor = .white)->NSColor {
@@ -79,15 +79,8 @@ struct MenuCustomization:Codable,Equatable {
 }
 @MainActor final class MenuCustomizationPanel {
     static let shared=MenuCustomizationPanel()
-    private var window:NSWindow?
     func show(title:String,fields:[MenuField],icon:NSImage?,extraColors:[(String,String,NSColor)]=[],onSave:@escaping()->Void) {
-        let view=MenuCustomizationView(fields:fields,fallback:icon,extraColors:extraColors) { [weak self] in onSave();self?.window?.orderOut(nil) }
-        if window==nil {
-            window=NSWindow(contentRect:NSRect(x:0,y:0,width:580,height:650),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
-            window?.isReleasedWhenClosed=false;window?.minSize=NSSize(width:540,height:450);window?.center()
-        }
-        window?.title=title+" · 菜单栏自定义";window?.contentView=NSHostingView(rootView:view)
-        window?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+        AppSettingsController.shared.show("menubar")
     }
     static func apply(_ button:NSStatusBarButton,fields:[MenuField],icon:NSImage?) {
         let settings=MenuCustomization.load();guard settings.enabled else { return }
@@ -98,20 +91,25 @@ struct MenuCustomization:Codable,Equatable {
         button.setAccessibilityLabel(fields.filter { settings.shown($0) }.map { settings.text($0) }.joined(separator:settings.separator))
     }
 }
-private struct MenuCustomizationView:View {
+struct MenuCustomizationView:View {
     let fields:[MenuField]
     let fallback:NSImage?
     let extraColors:[(String,String,NSColor)]
     let onSave:()->Void
-    @State private var draft=MenuCustomization.load()
+    private let defaults:UserDefaults
+    @State private var draft:MenuCustomization
+    init(fields:[MenuField],fallback:NSImage?,extraColors:[(String,String,NSColor)]=[],defaults:UserDefaults = .standard,onSave:@escaping()->Void) {
+        self.fields=fields;self.fallback=fallback;self.extraColors=extraColors;self.onSave=onSave;self.defaults=defaults
+        _draft=State(initialValue:MenuCustomization.load(defaults:defaults))
+    }
     private func color(_ key:String,_ fallback:NSColor)->Binding<Color> {
         Binding(get:{Color(nsColor:MenuCustomization.color(draft.colors[key] ?? "",fallback:fallback))},set:{draft.colors[key]=MenuCustomization.hex(NSColor($0))})
     }
     var body:some View {
         VStack(alignment:.leading,spacing:14) {
             Toggle("使用自定义菜单栏",isOn:$draft.enabled).font(.headline)
-            Text("选择显示内容；文字中的 {值} 会替换为实时数据，也可直接填写固定文字。").font(.callout).foregroundStyle(.secondary)
-            ScrollView {
+            Text("更改立即保存。启用后覆盖基础显示；文字中的 {值} 会替换为实时数据。").font(.callout).foregroundStyle(.secondary)
+            Group {
                 VStack(alignment:.leading,spacing:12) {
                     ForEach(fields) { f in
                         HStack {
@@ -138,15 +136,16 @@ private struct MenuCustomizationView:View {
                     Text("图标颜色用于上方选择的系统图标；原图标与表情保留自身配色。").font(.caption).foregroundStyle(.secondary)
                     HStack { Text("字号");Slider(value:$draft.fontSize,in:10...18,step:1);Text("\(Int(draft.fontSize))") }
                 }.padding(3)
-            }
+            }.disabled(!draft.enabled)
             Text("预览").font(.caption).foregroundStyle(.secondary)
             ScrollView(.horizontal) { Image(nsImage:draft.render(fields:fields,fallback:fallback)).padding(12) }.frame(height:52).background(.black.opacity(0.25),in:RoundedRectangle(cornerRadius:10))
             HStack {
                 Button("恢复原来的显示") { draft=MenuCustomization() }
                 Spacer()
-                Button("保存") { draft.save();onSave() }.buttonStyle(.borderedProminent)
+                Text("自动保存").font(.caption).foregroundStyle(.secondary)
             }
-        }.padding(22).frame(minWidth:530,minHeight:490).preferredColorScheme(.dark)
+        }.frame(maxWidth:.infinity,alignment:.leading).preferredColorScheme(.dark)
+            .onChange(of:draft) { _, value in value.save(defaults:defaults);onSave() }
     }
     private func symbolTitle(_ s:String)->String { ["wifi.router.fill":"路由器","network":"网络","bolt.fill":"闪电","house.fill":"房屋","calendar":"日历","clock.arrow.circlepath":"倒计时","star.fill":"星星","moon.stars.fill":"星月"][s] ?? s }
 }

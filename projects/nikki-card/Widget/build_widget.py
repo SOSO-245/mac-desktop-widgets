@@ -22,7 +22,8 @@ group=put('group',isa='PBXGroup',children=refs+[product],sourceTree='<group>')
 sourcephase=put('sources',isa='PBXSourcesBuildPhase',buildActionMask=2147483647,files=builds,runOnlyForDeploymentPostprocessing=0)
 resphase=put('resources',isa='PBXResourcesBuildPhase',buildActionMask=2147483647,files=resources,runOnlyForDeploymentPostprocessing=0)
 info=dict(CFBundleExecutable='$(EXECUTABLE_NAME)',CFBundleIdentifier='$(PRODUCT_BUNDLE_IDENTIFIER)',CFBundleName='NikkiWidget',CFBundleDisplayName='Nikki 实时卡片',CFBundleIconFile='AppIcon',CFBundlePackageType='XPC!',CFBundleShortVersionString='1.1.0',CFBundleVersion=datetime.datetime.now().strftime('%Y%m%d%H%M%S'),LSMinimumSystemVersion='14.0',NSExtension={'NSExtensionPointIdentifier':'com.apple.widgetkit-extension'},NSAppTransportSecurity={'NSAllowsLocalNetworking':True})
-info['CFBundleVersion']=plistlib.loads((app/'Contents/Info.plist').read_bytes())['CFBundleVersion']
+host_info=plistlib.loads((app/'Contents/Info.plist').read_bytes())
+for key in ('CFBundleVersion','CFBundleShortVersionString'):info[key]=host_info[key]
 (stage/'Info.plist').write_bytes(plistlib.dumps(info));(stage/'widget.entitlements').write_bytes(plistlib.dumps({'com.apple.security.app-sandbox':True,'com.apple.security.network.client':True}))
 settings=dict(PRODUCT_NAME='NikkiWidget',PRODUCT_BUNDLE_IDENTIFIER='local.homeatlas.NikkiMonitor.Widget',INFOPLIST_FILE=str(stage/'Info.plist'),CODE_SIGN_ENTITLEMENTS=str(stage/'widget.entitlements'),CODE_SIGN_IDENTITY='-',CODE_SIGN_STYLE='Manual',SDKROOT='macosx',MACOSX_DEPLOYMENT_TARGET='14.0',SWIFT_VERSION='5.0',ARCHS='arm64 x86_64',APPLICATION_EXTENSION_API_ONLY='YES',SKIP_INSTALL='YES',GENERATE_INFOPLIST_FILE='NO',LD_RUNPATH_SEARCH_PATHS='$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks')
 config=put('config',isa='XCBuildConfiguration',buildSettings=settings,name='Release')
