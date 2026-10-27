@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PROJECTS = {
     'vpn-card': 'FlClash实时小组件', 'nikki-card': 'Nikki实时小组件',
-    'codex-resets': 'Codex重置小组件', 'home-overview': 'Mac家庭概览',
+    'codex-resets': 'Codex重置小组件',
     'lunar-calendar': 'Mac万年历', 'mac-vitals': 'Mac实时监测',
 }
 FILES = ('AppSettings.swift', 'MenuCustomization.swift', 'StatusPopover.swift', 'AppUpdater.swift')

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sign all six audited Mac feeds; Scriptable changes require an explicit flag.
+"""Sign all five audited Mac feeds; Scriptable changes require an explicit flag.
 
 Private keys remain in the macOS Keychain. Never pass/export key contents.
 --check-only validates release metadata without signing or changing any files.
@@ -22,7 +22,6 @@ REPOSITORY = 'https://github.com/SOSO-245/mac-desktop-widgets'
 RAW = 'https://raw.githubusercontent.com/SOSO-245/mac-desktop-widgets'
 ET.register_namespace('sparkle', SPARKLE)
 PRODUCTS = {
-    'home-overview': 'local.homeatlas.HomeEnergy',
     'lunar-calendar': 'local.homeatlas.LunarCalendar',
     'codex-resets': 'local.homeatlas.CodexResets',
     'vpn-card': 'local.homeatlas.FlClashMonitor',
@@ -30,7 +29,6 @@ PRODUCTS = {
     'mac-vitals': 'local.homeatlas.MacVitals',
 }
 NOTES = {
-    'home-overview': '蓝紫动态水面、四季小黄鸭与点击游泳清雪；雨后两小时彩虹、雷雨足球和闪电碰撞互动。功率每秒读取，保留缺失读数语义。',
     'lunar-calendar': '新增贴边霜纹、蒲公英大风与间歇雷雨闪电；保留日期天气卡片、生日提醒、日程和可选 iCloud 文件夹同步。',
     'codex-resets': '小号经过天数下展示最近重置时间，X 图标打开对应公告原帖；保留感谢互动、电纹提醒、官网入口与独立刷新；跨卡片闪电落水触发鸭子短闪。',
     'vpn-card': '统一桌面、菜单栏、数据与更新设置；新增节点选择与测速。切换图标左键仍切换来源并打开客户端，右键选节点；过滤套餐提示和重名歧义，关闭窗口取消未完成请求，不启停 VPN。',
@@ -42,7 +40,7 @@ NOTES = {
 def audit_assets(assets):
     rows = json.loads((assets / 'manifest.json').read_text())
     if not isinstance(rows, list):
-        raise ValueError('Expected all six audited apps')
+        raise ValueError('Expected all five audited apps')
     feeds = [row for row in rows if row.get('project') != 'desktop-toolbox']
     if len(feeds) != len(PRODUCTS) or {row.get('project') for row in feeds} != set(PRODUCTS) or len(rows)-len(feeds)>1:
         raise ValueError('Expected one entry for each known app')
@@ -149,7 +147,7 @@ def main():
 
     output = ROOT / 'updates'
     output.mkdir(exist_ok=True)
-    # Validate all six inputs first, then sign/verify staged feeds before replacing
+    # Validate all five inputs first, then sign/verify staged feeds before replacing
     # any existing feed. A missing key or failed signature leaves published files.
     with tempfile.TemporaryDirectory(prefix='.signed-feeds-', dir=output) as temporary:
         stage = Path(temporary)

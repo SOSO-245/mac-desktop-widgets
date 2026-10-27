@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scan publishable files without printing sensitive matched values."""
 from pathlib import Path
-import re,subprocess,hashlib
+import re,subprocess,hashlib,sys
 ROOT=Path(__file__).resolve().parents[1]
 PATTERNS={
     'private-key':rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',
@@ -13,12 +13,16 @@ PATTERNS={
     'device-id':rb'(?:iot_cn_|miaomiaoc_cn_|zhimi_cn_)[A-Za-z0-9_]{8,}',
 }
 def main():
-    names=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=ROOT).decode().split('\0')
+    indexed='--index' in sys.argv
+    names=subprocess.check_output(['git','ls-files','--cached',* ([] if indexed else ['--others','--exclude-standard']),'-z'],cwd=ROOT).decode().split('\0')
     problems=[];count=0
+    # Home overview is private. Do not silently reintroduce it via a sync/build.
+    for blocked in ['projects/home-overview','updates/home-overview.xml']:
+        if (ROOT/blocked).exists():problems.append((blocked,'private project excluded from public distribution'))
     for name in filter(None,names):
         path=ROOT/name
         if path.is_symlink():problems.append((name,'symlink'));continue
-        data=path.read_bytes();count+=1
+        data=subprocess.check_output(['git','show',':'+name],cwd=ROOT) if indexed else path.read_bytes();count+=1
         for label,pattern in PATTERNS.items():
             if label=='personal-path' and name=='projects/mac-vitals/Vendor/macmon' and hashlib.sha256(data).hexdigest()=='57259ce6845d0904be247c8e860fcc923300bab52e28a01f476c22c852051286':continue
             if re.search(pattern,data):problems.append((name,label))

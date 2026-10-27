@@ -16,3 +16,7 @@ widget.entitlements
 *.zip
 *.log
 .env*
+
+# Private local application; never publish in this repository.
+/projects/home-overview/
+/updates/home-overview.xml

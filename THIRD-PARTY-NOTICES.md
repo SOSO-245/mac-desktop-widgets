@@ -18,12 +18,8 @@ Mac 实时监测分发并调用未修改的 macmon v0.10.0 官方 Apple Silicon 
 
 ## Sparkle
 
-六款使用 [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0)，保留官方框架签名。许可及其第三方依赖声明在各项目 Updater/Sparkle-LICENSE，发布 ZIP 根目录也包含 Sparkle-LICENSE.txt。归档 SHA256 固定于 updater_build.py。
+五款使用 [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0)，保留官方框架签名。许可及其第三方依赖声明在各项目 Updater/Sparkle-LICENSE，发布 ZIP 根目录也包含 Sparkle-LICENSE.txt。归档 SHA256 固定于 updater_build.py。
 
 ## Electric Border CSS (visual reference for Codex Resets)
 
 https://github.com/hammadxcm/electric-border-css — MIT, Copyright (c) 2025 Fyniti. The moving turbulence/displacement and layered glow are adapted to native SwiftUI Canvas; no webpage is embedded or downloaded at runtime. License: projects/codex-resets/Assets/ElectricBorder-MIT.txt (also included in the app Resources).
-
-## Power water duck
-
-`projects/home-overview/Resources/duck-*.png` are original AI-generated transparent illustrations commissioned for this project (base duck, seasonal accessories, snow and cartoon shock skeleton). Prompt is included alongside the asset. The SwiftUI water renderer is original project code; it does not embed a third-party runtime.

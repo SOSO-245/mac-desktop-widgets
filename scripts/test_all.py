@@ -8,7 +8,6 @@ def run(slug):
     with tempfile.TemporaryDirectory(prefix='desktop-kit-test-') as tmp:
         commands={
             'mac-vitals':[['xcrun','swiftc','-parse-as-library','Sources/Metrics.swift','Tests/CoreTests.swift','-o',str(Path(tmp)/'core')],[str(Path(tmp)/'core')]],
-            'home-overview':[['python3','Tests/run.py'],['zsh','Tests/run-overview-tests.sh'],['python3','-m','unittest','discover','-s','Tests','-p','test_install.py']],
             'codex-resets':[
                 ['bash','Tests/run-tests.sh']],
             'vpn-card':[['bash','Tests/run-tests.sh'],['bash','Tests/run-shadowrocket-tests.sh'],['bash','Tests/run-site-tests.sh'],['bash','Tests/run-traffic-tests.sh'],['bash','Tests/run-node-tests.sh'],['bash','Tests/run-shadowrocket-node-tests.sh'],['bash','Tests/run-node-picker-tests.sh']],
@@ -19,7 +18,6 @@ def run(slug):
             commands += [['xcrun','swiftc','-parse-as-library','Sources/MenuBarDisplay.swift','Tests/MenuBarTests.swift','-o',str(Path(tmp)/'menu-tests')],[str(Path(tmp)/'menu-tests')]]
         commands += [['xcrun','swiftc','-swift-version','5','-parse-as-library','Sources/AppSettings.swift','Sources/MenuCustomization.swift','Tests/MenuCustomizationTests.swift','-o',str(Path(tmp)/'custom-menu-tests')],[str(Path(tmp)/'custom-menu-tests')]]
         additional={
-            'home-overview':[('duck',['Sources/Model.swift','Sources/PowerWater.swift','Tests/DuckTests.swift']),('water-pointer',['Sources/Model.swift','Sources/PowerWater.swift','Tests/WaterPointerTests.swift'])],
             'mac-vitals':[('temperature-face',['Sources/Metrics.swift','Tests/TemperatureFaceTests.swift']),('curve',['Sources/Metrics.swift','Sources/Card.swift','Tests/CurveTests.swift'])],
             'codex-resets':[
                 ('original-post',['Sources/Model.swift','Tests/OriginalPostTests.swift']),
@@ -50,7 +48,7 @@ def main():
     failed=settings.returncode != 0
     print(('FAIL ' if failed else 'PASS ')+'shared-settings',flush=True);print(settings.stdout,flush=True)
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-        for slug,ok,log in pool.map(run,['home-overview','codex-resets','vpn-card','lunar-calendar','nikki-card','mac-vitals']):
+        for slug,ok,log in pool.map(run,['codex-resets','vpn-card','lunar-calendar','nikki-card','mac-vitals']):
             print(('PASS ' if ok else 'FAIL ')+slug,flush=True);print(log,flush=True);failed |= not ok
     raise SystemExit(1 if failed else 0)
 if __name__=='__main__':main()
