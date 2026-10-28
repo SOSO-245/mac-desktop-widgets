@@ -1,18 +1,19 @@
 # Mac Desktop Widgets & Cards
 
-六款中文原生 Mac 桌面工具及桌面工具箱：万年历、Codex 重置、VPN 实时卡片、Nikki 实时卡片、Mac 实时监测。SwiftUI / AppKit / WidgetKit，macOS 14 及以上。
+六款中文原生 Mac 桌面工具及桌面工具箱：家庭概览、万年历、Codex 重置、VPN 实时卡片、Nikki 实时卡片、Mac 实时监测。SwiftUI / AppKit / WidgetKit，macOS 14 及以上。
 
-[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.28-r1) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
+[下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.28-r2) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
 
-本次版本：[v2026.10.28-r1](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.28-r1)。六款工具与桌面工具箱的安装包、源码和校验清单见发布页。
+本次版本：[v2026.10.28-r2](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.28-r2)。六款工具与桌面工具箱的安装包、源码和校验清单见发布页。
 
 | 项目 | 版本 | 主要功能 | 形式 | 发布架构 |
 | --- | --- | --- | --- | --- |
-| [万年历](projects/lunar-calendar) | 1.4.7 | 农历、节假日、生日、重复日程、天气、可选 iCloud 文件夹同步；统一设置 | 应用＋实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
-| [Codex 重置](projects/codex-resets) | 1.4.1 | 公共重置公告、倒计时、经过时间、源站互动；统一设置与桌面边框修复 | 应用＋实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
-| [VPN 实时卡片](projects/vpn-card) | 1.4.2 | FlClash / Shadowrocket 套餐、双向流量曲线、节点选择与测速；统一设置 | 可拖动桌面卡片 | Apple Silicon / Intel |
-| [Nikki 实时卡片](projects/nikki-card) | 1.3.2 | 旁路由流量、套餐、站点延迟、策略组/节点切换；统一连接与显示设置 | 实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
-| [Mac 实时监测](projects/mac-vitals) | 1.2.5 | 系统功率估算、CPU、内存、温度、物理网卡网速；统一设置 | 实时卡片＋三尺寸小组件 | Apple Silicon |
+| [家庭概览](projects/home-overview) | 2.4.3 | HA 家庭状态、实时功率、水面角色和生日天气互动 | 应用＋实时卡片＋三尺寸小组件 | Apple Silicon |
+| [万年历](projects/lunar-calendar) | 1.4.9 | 农历、节假日、生日、重复日程、天气、可选 iCloud 文件夹同步；统一设置 | 应用＋实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
+| [Codex 重置](projects/codex-resets) | 1.4.3 | 公共重置公告、倒计时、经过时间、源站互动；统一设置与桌面边框修复 | 应用＋实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
+| [VPN 实时卡片](projects/vpn-card) | 1.4.3 | FlClash / Shadowrocket 套餐、双向流量曲线、节点选择与测速；统一设置 | 可拖动桌面卡片 | Apple Silicon / Intel |
+| [Nikki 实时卡片](projects/nikki-card) | 1.3.3 | 旁路由流量、套餐、站点延迟、策略组/节点切换；统一连接与显示设置 | 实时卡片＋三尺寸小组件 | Apple Silicon / Intel |
+| [Mac 实时监测](projects/mac-vitals) | 1.3.5 | 系统功率估算、CPU、内存、温度、物理网卡网速；统一设置 | 实时卡片＋三尺寸小组件 | Apple Silicon |
 
 家庭概览已按作者授权重新公开，仅发布脱敏源码和通用安装包，旧私人历史仍保留私有。合集包含六款工具与桌面工具箱。
 
