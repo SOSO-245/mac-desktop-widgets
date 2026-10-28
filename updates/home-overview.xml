@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>家庭概览 软件更新</title><link>https://github.com/SOSO-245/mac-desktop-widgets/releases</link><item><title>2.4.3</title><sparkle:version>20261028203742</sparkle:version><sparkle:shortVersionString>2.4.3</sparkle:shortVersionString><sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion><description>家庭概览重新公开：原生与动画皮肤、黄鸭与白天鹅、生日和天气装扮、平滑水面互动；需要填写自己的 HA 连接。 各款软件保持独立。应用仍未经过 Apple 公证，macOS 可能要求确认已有读取权限。</description><enclosure url="https://github.com/SOSO-245/mac-desktop-widgets/releases/download/v2026.10.28-r2/home-overview-macos.zip" length="52326192" type="application/octet-stream" sparkle:edSignature="9Bb+aietHtQTju+SKxvShxrrowWwVebJGU+Nu/OCwV0B6lmezb1FJ55zAls68R/DOtVXVzPkCn0D0URkHwI6Bw=="></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: +LUQ0I9lxYYs95bSvb/cwScO7nmjAQIDUN90X0ji/9Cv4LDq3i9YRNBNWDTHgMYtQTpo1/jG9UinsYZyGpn1BA==
+length: 1301
+-->

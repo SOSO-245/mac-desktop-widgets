@@ -39,6 +39,17 @@ struct ConnectionView: View {
                     ForEach(monitor.subscriptions,id:\.self) { Text($0).tag($0) }
                 }
             }
+            Divider()
+            Picker("套餐定时刷新", selection: Binding(get: { monitor.subscriptionRefreshInterval }, set: { monitor.setSubscriptionRefreshInterval($0) })) {
+                ForEach(SubscriptionRefreshPolicy.intervals, id: \.self) { Text(SubscriptionRefreshPolicy.title($0)).tag($0) }
+            }
+            HStack {
+                Button(monitor.subscriptionRefreshing ? "正在刷新套餐…" : "立即刷新套餐") { monitor.refreshSubscription() }
+                    .disabled(monitor.subscriptionRefreshing || !monitor.snapshot.isConnected)
+                Text(monitor.subscriptionRefreshMessage).font(.callout).foregroundStyle(.secondary)
+            }
+            Text("应用运行时更新当前匹配的订阅用量、到期时间和节点列表；不主动切换节点。隐藏卡片后仍执行，休眠错过的更新在恢复连接后补做。")
+                .font(.callout).foregroundStyle(.secondary)
             Spacer(minLength:0)
         }.frame(maxWidth:.infinity,alignment:.leading)
     }

@@ -2,12 +2,14 @@ import AppKit
 import SwiftUI
 import WidgetKit
 import ServiceManagement
-final class VitalsPanel:NSPanel {
+final class VitalsPanel:NSPanel,DuckWaterWindow {
     var locked=false
+    var duckWaterRegion:NSRect?
     override var canBecomeKey:Bool{true}
     override func sendEvent(_ event:NSEvent){
         if event.type == .leftMouseDown,event.window === self {
             let p=event.locationInWindow
+            if duckWaterRegion?.contains(p) == true {super.sendEvent(event);return}
             if !(p.y>frame.height-48 && p.x>frame.width-95) {
                 if !locked{performDrag(with:event);saveFrame(usingName:"VitalsFrame")};return
             }
@@ -23,28 +25,43 @@ final class VitalsPanel:NSPanel {
     @Published var top=UserDefaults.standard.bool(forKey:"top")
     @Published var loginEnabled=SMAppService.mainApp.status == .enabled
     @Published var loginNote=""
+    @Published var skin=VitalsSkin(rawValue:UserDefaults.standard.string(forKey:"desktopSkin") ?? "classic") ?? .classic
+    let duckWeather=DuckWeatherStore()
     var snapshot=Metrics()
     let statusPopover=StatusPopover()
-    var dimensions:NSSize{switch size{case "small":return NSSize(width:220,height:164);case "large":return NSSize(width:344,height:344);default:return NSSize(width:344,height:164)}}
+    var dimensions:NSSize{switch size{case "small":return NSSize(width:skin.smallWidth,height:164);case "large":return NSSize(width:344,height:344);default:return NSSize(width:344,height:164)}}
     func applicationDidFinishLaunching(_ notification:Notification){
         WidgetSelfRepair.shared.start()
         NSApp.setActivationPolicy(.accessory)
         status=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
         panel=VitalsPanel(contentRect:NSRect(origin:.zero,size:dimensions),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
-        panel.title="Mac 实时监测";panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=true;panel.isReleasedWhenClosed=false;panel.hidesOnDeactivate=false
+        panel.title="Mac 实时监测";panel.identifier=NSUserInterfaceItemIdentifier("MacVitalsCard");panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=true;panel.isReleasedWhenClosed=false;panel.hidesOnDeactivate=false
         panel.collectionBehavior=[.canJoinAllSpaces,.stationary,.fullScreenAuxiliary,.ignoresCycle]
         panel.locked=locked;panel.isMovable = !locked
         if !panel.setFrameUsingName("VitalsFrame"){panel.center()}
         host=NSHostingView(rootView:desktopCard());panel.contentView=host
         configureSettings();resize();updateLevel();makeMenu();updateStatus();if !hidden{panel.orderFrontRegardless()}
-        collector.onUpdate={[weak self] m in guard let self else{return};self.snapshot=m;self.broker.value=m;if !self.hidden{self.host.rootView=self.desktopCard()};self.updateStatus()}
+        duckWeather.onUpdate={[weak self] in guard let self,self.skin == .duck,!self.hidden else{return};self.host.rootView=self.desktopCard()}
+        collector.onUpdate={[weak self] m in guard let self else{return};self.snapshot=m;self.broker.value=m;if self.skin == .duck{self.duckWeather.refresh()};if !self.hidden{self.host.rootView=self.desktopCard()};self.updateStatus()}
         broker.start();collector.start()
         timer=Timer.scheduledTimer(withTimeInterval:60,repeats:true){[weak self] _ in Task{@MainActor in self?.broker.start();WidgetCenter.shared.reloadTimelines(ofKind:Metrics.kind)}}
         WidgetCenter.shared.reloadTimelines(ofKind:Metrics.kind)
     }
     func card()->VitalsCard {VitalsCard(data:snapshot,size:size,locked:locked,onLock:{[weak self] in self?.toggleLock()},onMenu:{[weak self] in self?.popup()})}
-    func desktopCard()->AnyView {let original=card();var plain=original;plain.menuSurface=true
+    func desktopCard()->AnyView {
+        if skin == .duck {
+            let original=VitalsDuckCard(data:snapshot,weather:duckWeather.weather,timezone:duckWeather.timezone,size:size,locked:locked,onLock:{[weak self] in self?.toggleLock()})
+            var plain=original;plain.menuSurface=true
+            return AnyView(DesktopCardSurface(original:original,plain:plain))
+        }
+        let original=card();var plain=original;plain.menuSurface=true
         return AnyView(DesktopCardSurface(original:original,plain:plain))
+    }
+    func setSkin(_ value:VitalsSkin){
+        guard skin != value else{return};skin=value;UserDefaults.standard.set(value.rawValue,forKey:"desktopSkin")
+        panel.duckWaterRegion=nil
+        if value == .duck {duckWeather.refresh()}else{try? FileManager.default.removeItem(at:GridPreferences.folder.appendingPathComponent("status/mac-water.json"))}
+        resize();ToolboxBridge.shared.publish()
     }
     func makeMenu(){
         let m=NSMenu();m.delegate=self
@@ -69,7 +86,7 @@ final class VitalsPanel:NSPanel {
     var menuIcon:NSImage?{NSImage(systemSymbolName:"desktopcomputer",accessibilityDescription:"Mac 实时监测")?.withSymbolConfiguration(.init(paletteColors:[MenuCustomization.color("#66FFAD")]))}
     func updateStatus(){statusPopover.update();guard let b=status.button else{return};let prefs=MenuCustomization.load();if prefs.enabled{MenuCustomizationPanel.apply(b,fields:fields(),icon:menuIcon)}else{let img=prefs.render(fields:fields(),fallback:menuIcon);if b.image?.tiffRepresentation != img.tiffRepresentation{b.image=img};b.title="";b.imagePosition = .imageOnly};b.toolTip="Mac 实时监测 · "+(snapshot.fresh() ? snapshot.powerLabel:"等待采集")}
     func configureSettings() {
-        ToolboxBridge.shared.start(show:{[weak self] visible in self?.setCardVisible(visible)},size:{[weak self] value in self?.setCardSize(value)})
+        ToolboxBridge.shared.start(show:{[weak self] visible in self?.setCardVisible(visible)},size:{[weak self] value in self?.setCardSize(value)},smallWidth:{[weak self] in self?.skin.smallWidth ?? 220})
         AppSettingsController.shared.configure(title:"Mac 实时监测",pages:[
             AppSettingsPage(id:"toolbox",title:"桌面排列",symbol:"square.grid.2x2") {AnyView(ToolboxSettingsLink())},
             AppSettingsPage(id:"general",title:"通用",symbol:"gearshape") {[weak self] in guard let self else{return AnyView(EmptyView())};return AnyView(VitalsGeneralSettings(app:self))},

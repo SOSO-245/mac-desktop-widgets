@@ -32,7 +32,7 @@ def main():
     info = dict(CFBundleDevelopmentRegion='zh_CN', CFBundleName=NAME,
                 CFBundleDisplayName=NAME, CFBundleExecutable='MacVitals',
                 CFBundleIdentifier=BUNDLE, CFBundlePackageType='APPL',
-                CFBundleShortVersionString='1.2.5',
+                CFBundleShortVersionString='1.3.5',
                 CFBundleVersion=datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
                 LSMinimumSystemVersion='14.0', LSUIElement=True,
                 NSHighResolutionCapable=True, NSPrincipalClass='NSApplication',
@@ -44,6 +44,8 @@ def main():
         info['CFBundleIconFile'] = 'AppIcon'
     run('ditto', '--norsrc', ROOT / 'Vendor/macmon', resources / 'macmon')
     run('ditto', '--norsrc', ROOT / 'Vendor/LICENSE', resources / 'macmon-LICENSE')
+    if (ROOT / 'Resources').exists():
+        run('ditto', '--norsrc', ROOT / 'Resources', resources)
     run('codesign', '--force', '--sign', '-', resources / 'macmon')
     (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
     sdk = subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip()
@@ -78,7 +80,7 @@ def main():
     sha = hashlib.sha256(archive.read_bytes()).hexdigest()
     source_archive = delivery / 'Mac实时监测-源码.zip'
     with zipfile.ZipFile(source_archive, 'w', compression=zipfile.ZIP_DEFLATED) as package:
-        for folder in ('Sources', 'Tests', 'Updater', 'Assets', 'Widget'):
+        for folder in ('Sources', 'Tests', 'Updater', 'Assets', 'Widget', 'Resources'):
             for file in sorted((ROOT / folder).rglob('*')):
                 if file.is_file():
                     package.write(file, Path(ROOT.name) / file.relative_to(ROOT))

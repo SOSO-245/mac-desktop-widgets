@@ -19,12 +19,13 @@ import ServiceManagement
     @Published var zoomToCards=true
     @Published var undoAvailable=false
     private var timer:Timer?
-    private var initialized=false
+    private var discovery=ToolboxSelectionDiscovery()
     @Published var edited=false
     private var appliedOrder:[String]=[]
     private var appliedScreen=0
     private var appliedEdge="left"
     private var lastAppliedSizes:[String:String]=[:]
+    private var lastAppliedDimensions:[String:NSSize]=[:]
     private var undo:[String:CardPresence]=[:]
     var screens:[NSScreen]{NSScreen.screens}
     var area:NSRect {let i=min(max(0,screenIndex),max(0,screens.count-1));return screens.isEmpty ? NSRect(x:0,y:0,width:1440,height:900):screens[i].visibleFrame}
@@ -33,9 +34,16 @@ import ServiceManagement
     var modules:[ToolModule]{order.compactMap{id in ToolModule.all.first{$0.id==id}}}
     func reorder(_ id:String,_ delta:Int){guard let i=order.firstIndex(of:id),order.indices.contains(i+delta) else{return};order.swapAt(i,i+delta);edited=true}
     init(){
-        selected=Set(ToolModule.all.map(\.id))
         sizes=Dictionary(uniqueKeysWithValues:ToolModule.all.map{($0.id,["local.homeatlas.HomeEnergy","local.homeatlas.CodexResets"].contains($0.id) ? "small":(["local.homeatlas.FlClashMonitor","local.homeatlas.MacVitals"].contains($0.id) ? "large":"medium"))})
         let p=GridPreferences.read();if FileManager.default.fileExists(atPath:GridPreferences.folder.appendingPathComponent("grid.json").path){snap=p.snap;automatic=p.automatic}
+        if let d=try? Data(contentsOf:GridPreferences.folder.appendingPathComponent("draft.json")),
+           let saved=try? JSONDecoder().decode(ToolboxDraft.self,from:d),
+           let draft=saved.normalized(moduleIDs:ToolModule.all.map(\.id),screenCount:screens.count) {
+            selected=draft.selected;sizes.merge(draft.sizes){_,new in new};order=draft.order
+            screenIndex=draft.screenIndex;edge=draft.edge;snap=draft.snap;automatic=draft.automatic
+            unifiedAppearance=draft.unifiedAppearance;glass=draft.glass;brightness=draft.brightness
+            transparency=draft.transparency;zoomToCards=draft.zoomToCards;edited=true
+        }
         if let d=try? Data(contentsOf:GridPreferences.folder.appendingPathComponent("undo.json")),let u=try? JSONDecoder().decode([String:CardPresence].self,from:d){undo=u;undoAvailable = !u.isEmpty}
         poll();timer=Timer.scheduledTimer(withTimeInterval:2,repeats:true){[weak self] _ in Task{@MainActor in self?.poll()}}
     }
@@ -46,20 +54,40 @@ import ServiceManagement
             if let d=try? Data(contentsOf:url),d.count<8192,let s=try? JSONDecoder().decode(CardPresence.self,from:d),s.id==m.id,s.frame.valid,Date().timeIntervalSince(s.updated)<10 {fresh[m.id]=s}
         }
         states=fresh
-        if !initialized && !edited && fresh.count==ToolModule.all.count {selected=Set(fresh.filter{$0.value.visible}.keys);sizes=fresh.mapValues(\.size);initialized=true}
+        let added=discovery.discover(fresh.mapValues(\.visible),frozen:edited || !lastAppliedSizes.isEmpty)
+        selected.formUnion(added)
+        for id in added {sizes[id]=fresh[id]?.size}
         for (id,s) in fresh where sizes[id]==nil {sizes[id]=s.size}
         if automatic && GridPreferences.read().automatic && !busy && !lastAppliedSizes.isEmpty && selected==Set(lastAppliedSizes.keys) && order==appliedOrder && screenIndex==appliedScreen && edge==appliedEdge && selected.allSatisfy({fresh[$0] != nil && sizes[$0]==lastAppliedSizes[$0]}) {
             let live=fresh.filter{selected.contains($0.key)}.mapValues(\.size)
-            if live != lastAppliedSizes {sizes.merge(live){_,new in new};apply(saveUndo:false)}
+            let dimensions=fresh.filter{selected.contains($0.key)}.mapValues{$0.frame.rect.size}
+            if live != lastAppliedSizes || dimensions != lastAppliedDimensions {sizes.merge(live){_,new in new};apply(saveUndo:false)}
         }
     }
     func dimensions(_ id:String)->NSSize {
         let size=sizes[id] ?? states[id]?.size ?? "medium"
         let narrow=["local.homeatlas.HomeEnergy","local.homeatlas.CodexResets","local.homeatlas.LunarCalendar"].contains(id)
-        return NSSize(width:size=="small" ? (narrow ? 164:220):344,height:size=="large" ? 344:164)
+        let reported=states[id]?.smallWidth
+        let width=reported.flatMap{($0.isFinite && (100...344).contains($0)) ? $0:nil} ?? (narrow ? 164:220)
+        return NSSize(width:size=="small" ? width:344,height:size=="large" ? 344:164)
     }
-    var ready:Bool{!selected.isEmpty && selected.allSatisfy{states[$0] != nil}}
+    var readiness:ToolboxReadiness{ToolboxReadiness.evaluate(selected:selected,responding:Set(states.keys),running:running)}
+    var ready:Bool{readiness == .ready}
     var canApply:Bool{ready && placements.count==selected.count}
+    var readinessMessage:String? {
+        func names(_ ids:[String])->String {ids.map{id in ToolModule.all.first{$0.id==id}?.name ?? id}.joined(separator:"、")}
+        switch readiness {
+        case .empty:return "勾选已启动的卡片后，即可预览并应用排列。"
+        case .stopped(let ids):return "请先启动所选软件："+names(ids)+"；也可取消勾选，排列其余卡片。"
+        case .waiting(let ids):return "正在等待卡片响应："+names(ids)+"。请确认已更新软件并打开桌面卡片。"
+        case .ready:return canApply ? nil : "当前屏幕放不下所选卡片，请减小尺寸或减少选择。"
+        }
+    }
+    var draft:ToolboxDraft {ToolboxDraft(selected:selected,sizes:sizes,order:order,screenIndex:screenIndex,edge:edge,snap:snap,automatic:automatic,unifiedAppearance:unifiedAppearance,glass:glass,brightness:brightness,transparency:transparency,zoomToCards:zoomToCards)}
+    func saveDraft(){
+        try? FileManager.default.createDirectory(at:GridPreferences.folder,withIntermediateDirectories:true)
+        if let d=try? JSONEncoder().encode(draft){try? d.write(to:GridPreferences.folder.appendingPathComponent("draft.json"),options:.atomic)}
+    }
     var previewArea:NSRect {
         guard zoomToCards,let first=placements.values.first else{return area}
         return placements.values.reduce(first){$0.union($1)}.insetBy(dx:-24,dy:-24)
@@ -85,14 +113,14 @@ import ServiceManagement
     func apply(saveUndo:Bool=true){
         let target=placements
         guard !busy,!selected.isEmpty,target.count==selected.count,selected.allSatisfy({states[$0] != nil}) else {note="屏幕空间不足或部分软件尚未启动，请调整尺寸或选择。";return}
-        busy=true;initialized=true
+        busy=true;edited=true
         appliedOrder=order;appliedScreen=screenIndex;appliedEdge=edge
         if saveUndo {undo=states.filter{selected.contains($0.key)};undoAvailable=true;try? FileManager.default.createDirectory(at:GridPreferences.folder,withIntermediateDirectories:true);if let d=try? JSONEncoder().encode(undo){try? d.write(to:GridPreferences.folder.appendingPathComponent("undo.json"),options:.atomic)}}
         let a=area.insetBy(dx:20,dy:20);var p=GridPreferences.read();p.snap=snap;p.automatic=automatic;p.anchorX=edge=="right" ? a.maxX-344:a.minX;p.anchorTop=a.maxY;p.save()
         for id in selected{send(id,"size",["size":sizes[id] ?? "medium"]);send(id,"show");if unifiedAppearance{appearanceCommand(id)}}
         DispatchQueue.main.asyncAfter(deadline:.now()+0.35){
             for (id,r) in target {self.send(id,"place",["x":r.minX,"y":r.minY])}
-            self.lastAppliedSizes=Dictionary(uniqueKeysWithValues:self.selected.map{($0,self.sizes[$0] ?? "medium")});self.note="正在核对实际位置…"
+            self.lastAppliedSizes=Dictionary(uniqueKeysWithValues:self.selected.map{($0,self.sizes[$0] ?? "medium")});self.lastAppliedDimensions=target.mapValues(\.size);self.note="正在核对实际位置…"
             DispatchQueue.main.asyncAfter(deadline:.now()+2.5){
                 self.poll()
                 let verified=target.allSatisfy {id,r in guard let actual=self.states[id]?.frame.rect else{return false};return abs(actual.minX-r.minX)<2 && abs(actual.minY-r.minY)<2 && abs(actual.width-r.width)<2 && abs(actual.height-r.height)<2}
@@ -105,6 +133,30 @@ import ServiceManagement
         var p=GridPreferences.read();p.automatic=false;p.snap=false;p.save();automatic=false;snap=false;lastAppliedSizes=[:]
         for (id,s) in undo{send(id,"size",["size":s.size]);send(id,s.visible ? "show":"hide");if let g=s.glass,let b=s.brightness,let t=s.transparency{send(id,"appearance",["glass":g,"brightness":b,"transparency":t])}}
         DispatchQueue.main.asyncAfter(deadline:.now()+0.35){for (id,s) in self.undo{self.send(id,"place",["x":s.frame.x,"y":s.frame.y])};self.sizes.merge(self.undo.mapValues(\.size)){_,new in new};self.note="已恢复上次位置与尺寸。";self.busy=false}
+    }
+}
+private struct ToolboxPreviewTile:View {
+    let module:ToolModule
+    let frame:NSRect
+    let area:NSRect
+    let scale:CGFloat
+    let unified:Bool
+    let glass:Bool
+    let brightness:Double
+    let transparency:Double
+    var body:some View {
+        let material = unified && glass
+        let tint:Color = material && brightness<0 ? .black:.white
+        let alpha:Double = material ? (0.3+abs(brightness)*0.005)*(1-transparency/100):0.12
+        let corner:CGFloat = max(6,24*scale)
+        VStack(spacing:3) {
+            Image(systemName:module.symbol).font(.system(size:max(9,15*scale)))
+            Text(module.name).font(.system(size:max(8,12*scale),weight:.semibold)).lineLimit(1)
+        }
+        .foregroundStyle(.white).frame(width:frame.width*scale,height:frame.height*scale)
+        .background(tint.opacity(alpha),in:RoundedRectangle(cornerRadius:corner))
+        .overlay(RoundedRectangle(cornerRadius:corner).stroke(.mint.opacity(0.65),lineWidth:1))
+        .offset(x:(frame.minX-area.minX)*scale,y:(area.maxY-frame.maxY)*scale)
     }
 }
 struct ToolboxView:View {
@@ -120,11 +172,7 @@ struct ToolboxView:View {
                         RoundedRectangle(cornerRadius:16).fill(LinearGradient(colors:[Color(red:0.06,green:0.13,blue:0.24),Color(red:0.16,green:0.14,blue:0.29)],startPoint:.topLeading,endPoint:.bottomTrailing))
                         ForEach(ToolModule.all){m in
                             if let r=model.placements[m.id]{
-                                VStack(spacing:3){Image(systemName:m.symbol).font(.system(size:max(9,15*scale)));Text(m.name).font(.system(size:max(8,12*scale),weight:.semibold)).lineLimit(1)}
-                                    .foregroundStyle(.white).frame(width:r.width*scale,height:r.height*scale)
-                                    .background((model.unifiedAppearance && model.glass ? (model.brightness<0 ? Color.black:Color.white):Color.white).opacity(model.unifiedAppearance && model.glass ? (0.3+abs(model.brightness)*0.005)*(1-model.transparency/100):0.12),in:RoundedRectangle(cornerRadius:max(6,24*scale)))
-                                    .overlay(RoundedRectangle(cornerRadius:max(6,24*scale)).stroke(.mint.opacity(0.65),lineWidth:1))
-                                    .offset(x:(r.minX-a.minX)*scale,y:(a.maxY-r.maxY)*scale)
+                                ToolboxPreviewTile(module:m,frame:r,area:a,scale:scale,unified:model.unifiedAppearance,glass:model.glass,brightness:model.brightness,transparency:model.transparency)
                             }
                         }
                     }.frame(width:a.width*scale,height:a.height*scale)
@@ -169,11 +217,13 @@ struct ToolboxView:View {
                     Toggle("应用后，尺寸变化自动重排",isOn:$model.automatic)
                     Text("勾选和尺寸修改仅影响预览；“应用排列”后生效。系统小组件不参与排列。").font(.caption).foregroundStyle(.secondary)
                     HStack{Button("恢复上次位置"){model.restore()}.disabled(!model.undoAvailable || model.busy);Spacer();Button("确认并应用排列"){model.apply()}.buttonStyle(.borderedProminent).disabled(model.busy || !model.canApply)}
-                    if !model.ready {Text("等待卡片软件接入新版排列功能…").font(.callout).foregroundStyle(.orange)}
+                    if let message=model.readinessMessage {Text(message).font(.callout).foregroundStyle(.orange)}
+                    if model.automatic {Text("自动重排会在确认应用排列后启用；勾选本身不会移动卡片。").font(.caption).foregroundStyle(.secondary)}
                     Text(model.note).font(.callout).foregroundStyle(.secondary)
                 }.padding(24).disabled(model.busy)
             }.frame(width:380)
         }.frame(minWidth:850,minHeight:720).preferredColorScheme(.dark)
+            .onChange(of:model.draft){_,_ in model.saveDraft()}
     }
 }
 @MainActor final class ToolboxDelegate:NSObject,NSApplicationDelegate {

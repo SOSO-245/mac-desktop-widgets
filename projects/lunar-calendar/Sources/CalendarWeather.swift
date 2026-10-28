@@ -103,7 +103,7 @@ enum CalendarWeatherAPI {
     enum Source:String,CaseIterable {case home,city,location}
     @Published private(set) var source:Source
     @Published private(set) var city:WeatherCity?
-    @Published private(set) var reading:CalendarWeatherReading?
+    @Published private(set) var reading:CalendarWeatherReading? {didSet{publishDuckWeather()}}
     @Published private(set) var trend:WeatherTemperatureTrend?
     @Published private(set) var note=""
     @Published private(set) var busy=false
@@ -118,6 +118,26 @@ enum CalendarWeatherAPI {
     private var generation=UUID(),searchGeneration=UUID()
     private var lastAttempt=Date.distantPast
     private var timer:Timer?
+    private func publishDuckWeather() {
+        let folder=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/HomeAtlasToolbox/status")
+        let file=folder.appendingPathComponent("calendar-weather.json")
+        guard let reading,CalendarWeatherReading.fresh(reading.checkedAt) else{try? FileManager.default.removeItem(at:file);return}
+        var condition:String
+        switch reading.symbol {
+        case "cloud.bolt", "cloud.bolt.fill", "cloud.bolt.rain.fill":condition="lightning-rainy"
+        case "cloud.snow", "cloud.snow.fill", "snowflake":condition="snowy"
+        case "cloud.rain", "cloud.rain.fill", "cloud.drizzle.fill", "cloud.heavyrain.fill":condition="rainy"
+        case "sun.max", "sun.max.fill":condition="sunny"
+        case "moon.stars", "moon.stars.fill", "moon.fill":condition="clear-night"
+        case "cloud.fog", "cloud.fog.fill":condition="fog"
+        case "wind":condition="windy"
+        default:condition="cloudy"
+        }
+        if ["台风","typhoon","hurricane","飓风"].contains(reading.condition.lowercased()){condition="typhoon"}
+        let value:[String:Any]=["schema":1,"condition":condition,"checkedAt":reading.checkedAt,"timezone":TimeZone.current.identifier]
+        try? FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        if let bytes=try? JSONSerialization.data(withJSONObject:value){try? bytes.write(to:file,options:.atomic)}
+    }
     init() {
         source=Source(rawValue:UserDefaults.standard.string(forKey:"calendarWeather.source") ?? "home") ?? .home
         city=UserDefaults.standard.data(forKey:"calendarWeather.city").flatMap{try? JSONDecoder().decode(WeatherCity.self,from:$0)}

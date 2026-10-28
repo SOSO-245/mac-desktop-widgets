@@ -26,6 +26,8 @@ struct FlClashCard: View {
     var onAppearance:(()->Void)? = nil
     var onChooseNode: () -> Void = {}
 
+    @State private var showsTrafficExplanation = false
+
     private let secondary = Color(red: 0.66, green: 0.72, blue: 0.83)
     private let cyan = Color(red: 0.38, green: 0.79, blue: 1)
     private let purple = Color(red: 0.66, green: 0.56, blue: 1)
@@ -47,6 +49,15 @@ struct FlClashCard: View {
         }
         .padding(14)
         .frame(width: size.dimensions.width, height: size.dimensions.height, alignment: .top)
+        .popover(isPresented: $showsTrafficExplanation) {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("隧道总网速", systemImage: "info.circle").font(.headline)
+                Text(snapshot.trafficHint)
+                Text("仅代理／代理＋直连切换适用于 FlClash 和 Nikki。灰点表示当前统计范围不能拆分。")
+                    .foregroundStyle(.secondary)
+                Button("知道了") { showsTrafficExplanation = false }
+            }.padding(18).frame(width: 280)
+        }
         .foregroundStyle(.white)
         .background {
             if !menuSurface { ZStack {
@@ -148,10 +159,10 @@ struct FlClashCard: View {
         }.fixedSize().accessibilityHidden(true)
     }
     private var trafficHelp: String {
-        snapshot.trafficLabel + "。" + snapshot.trafficHint + (snapshot.client == .flclash ? " 点击速度切换统计范围。" : "")
+        snapshot.trafficLabel + "。" + snapshot.trafficHint + (snapshot.client == .flclash ? " 点击速度切换统计范围。" : " 点击查看统计说明。")
     }
     private func toggleTrafficScope() {
-        guard snapshot.client == .flclash else { return }
+        guard snapshot.client == .flclash else { showsTrafficExplanation = true; return }
         onTrafficScope(snapshot.trafficScope == .all ? .proxyOnly : .all)
     }
 

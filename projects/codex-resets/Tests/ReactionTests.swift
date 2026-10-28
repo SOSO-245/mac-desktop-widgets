@@ -48,6 +48,10 @@ import Foundation
   test(ReactionCrossing.waterImpact(from:CGPoint(x:30,y:110),to:CGPoint(x:100,y:110),water:water) != nil)
   test(ReactionCrossing.waterImpact(from:CGPoint(x:50,y:80),to:CGPoint(x:50,y:97),water:water,radius:4)==CGPoint(x:50,y:100))
   test(ReactionCrossing.waterImpact(from:CGPoint(x:50,y:80),to:CGPoint(x:50,y:94),water:water,radius:4)==nil)
+  test(ReactionCrossing.nearestTarget(["mac":home],source:source)=="mac")
+  test(ReactionCrossing.nearestTarget(["home":home,"mac":CGRect(x:-180,y:0,width:164,height:164)],source:source)=="home")
+  test(ReactionCrossing.nearestTarget(["mac":CGRect(x:360,y:0,width:164,height:164)],source:source)==nil)
+  test(ReactionCrossing.nearestTarget([:],source:source)==nil)
   print("PASS \(checks) reaction delta and left-only crossing checks")
  }
 }

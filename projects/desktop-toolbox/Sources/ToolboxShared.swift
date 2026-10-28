@@ -15,7 +15,7 @@ struct CardPlacement:Codable,Equatable {var x:Double;var y:Double;var width:Doub
     var rect:NSRect{NSRect(x:x,y:y,width:width,height:height)}
     var valid:Bool{[x,y,width,height].allSatisfy{$0.isFinite} && width>=100 && width<=1000 && height>=100 && height<=1000 && abs(x)<100000 && abs(y)<100000}
 }
-struct CardPresence:Codable {let id:String;let updated:Date;let visible:Bool;let size:String;let frame:CardPlacement;var glass:Bool?=nil;var brightness:Double?=nil;var transparency:Double?=nil}
+struct CardPresence:Codable {let id:String;let updated:Date;let visible:Bool;let size:String;let frame:CardPlacement;var glass:Bool?=nil;var brightness:Double?=nil;var transparency:Double?=nil;var smallWidth:Double?=nil}
 struct GridPreferences:Codable {
     var snap=false;var automatic=false;var anchorX:Double?;var anchorTop:Double?;var screenID:UInt32?
     static let folder=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/HomeAtlasToolbox")

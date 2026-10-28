@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sign all five audited Mac feeds; Scriptable changes require an explicit flag.
+"""Sign all six audited Mac feeds; Scriptable changes require an explicit flag.
 
 Private keys remain in the macOS Keychain. Never pass/export key contents.
 --check-only validates release metadata without signing or changing any files.
@@ -22,6 +22,7 @@ REPOSITORY = 'https://github.com/SOSO-245/mac-desktop-widgets'
 RAW = 'https://raw.githubusercontent.com/SOSO-245/mac-desktop-widgets'
 ET.register_namespace('sparkle', SPARKLE)
 PRODUCTS = {
+    'home-overview': 'local.homeatlas.HomeEnergy',
     'lunar-calendar': 'local.homeatlas.LunarCalendar',
     'codex-resets': 'local.homeatlas.CodexResets',
     'vpn-card': 'local.homeatlas.FlClashMonitor',
@@ -29,10 +30,11 @@ PRODUCTS = {
     'mac-vitals': 'local.homeatlas.MacVitals',
 }
 NOTES = {
+    'home-overview': '家庭概览重新公开：原生与动画皮肤、黄鸭与白天鹅、生日和天气装扮、平滑水面互动；需要填写自己的 HA 连接。',
     'lunar-calendar': '新增贴边霜纹、蒲公英大风与间歇雷雨闪电；保留日期天气卡片、生日提醒、日程和可选 iCloud 文件夹同步。',
     'codex-resets': '小号经过天数下展示最近重置时间，X 图标打开对应公告原帖；保留感谢互动、电纹提醒、官网入口与独立刷新；跨卡片闪电落水触发鸭子短闪。',
     'vpn-card': '统一桌面、菜单栏、数据与更新设置；新增节点选择与测速。切换图标左键仍切换来源并打开客户端，右键选节点；过滤套餐提示和重名歧义，关闭窗口取消未完成请求，不启停 VPN。',
-    'nikki-card': '统一桌面、菜单栏、连接与更新设置；连接表单直接嵌入，保留原钥匙串、套餐匹配、节点选择及用户偏好，不修改旁路由监听。',
+    'nikki-card': '套餐定时更新默认每小时，可关闭、调整或立即刷新；只更新当前匹配的 HTTP 订阅，不主动切换节点。',
     'mac-vitals': '真实功率曲线采用顺滑弧线和柔和辉光；网速轻量双向动画，新增五档温度表情与实际风扇 RPM，90°C 起进入红色档。',
 }
 
@@ -40,7 +42,7 @@ NOTES = {
 def audit_assets(assets):
     rows = json.loads((assets / 'manifest.json').read_text())
     if not isinstance(rows, list):
-        raise ValueError('Expected all five audited apps')
+        raise ValueError('Expected all six audited apps')
     feeds = [row for row in rows if row.get('project') != 'desktop-toolbox']
     if len(feeds) != len(PRODUCTS) or {row.get('project') for row in feeds} != set(PRODUCTS) or len(rows)-len(feeds)>1:
         raise ValueError('Expected one entry for each known app')
@@ -147,7 +149,7 @@ def main():
 
     output = ROOT / 'updates'
     output.mkdir(exist_ok=True)
-    # Validate all five inputs first, then sign/verify staged feeds before replacing
+    # Validate all six inputs first, then sign/verify staged feeds before replacing
     # any existing feed. A missing key or failed signature leaves published files.
     with tempfile.TemporaryDirectory(prefix='.signed-feeds-', dir=output) as temporary:
         stage = Path(temporary)

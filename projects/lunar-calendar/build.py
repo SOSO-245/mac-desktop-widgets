@@ -150,7 +150,7 @@ def generate_project():
     }), encoding='utf-8')
 
     common = {
-        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.4.7',
+        'CFBundleDevelopmentRegion': 'zh_CN', 'CFBundleShortVersionString': '1.4.9',
         'CFBundleVersion': datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
         'CFBundleExecutable': '$(EXECUTABLE_NAME)', 'CFBundleIdentifier': '$(PRODUCT_BUNDLE_IDENTIFIER)',
         'CFBundleName': '$(PRODUCT_NAME)', 'LSMinimumSystemVersion': '14.0',

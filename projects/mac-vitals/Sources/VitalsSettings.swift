@@ -22,6 +22,12 @@ struct VitalsDesktopSettings:View {
     var body:some View {
         VStack(alignment:.leading,spacing:18) {
             Toggle("显示桌面卡片",isOn:Binding(get:{!app.hidden},set:app.setCardVisible))
+            Picker("卡片皮肤",selection:Binding(get:{app.skin},set:app.setSkin)) {
+                Text("监测面板").tag(VitalsSkin.classic);Text("小鸭子").tag(VitalsSkin.duck)
+            }.pickerStyle(.segmented)
+            if app.skin == .duck {
+                Text("小鸭子随实时功率在 0–50 W 之间移动，超过 50 W 时停在终点并显示真实数值。点击鸭子浮动或清雪，点击水面游泳潜水；天气与四季造型自动切换。天气沿用万年历的本机数据，缺失或过期时使用四季造型。").font(.callout).foregroundStyle(.secondary)
+            }
             Picker("卡片尺寸",selection:Binding(get:{app.size},set:app.setCardSize)) {
                 Text("小号").tag("small");Text("中号").tag("medium");Text("大号").tag("large")
             }.pickerStyle(.segmented)

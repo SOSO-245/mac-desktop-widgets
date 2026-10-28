@@ -11,6 +11,45 @@ final class MonitorCoordinator: ObservableObject {
     private(set) var settings = ConnectionSettings.load()
     private(set) var api: NikkiAPI?
     var client: ProxyClient { .nikki }
+    @Published var subscriptionRefreshing = false
+    @Published var subscriptionRefreshMessage = ""
+    @Published private(set) var subscriptionRefreshInterval = SubscriptionRefreshPolicy.interval(UserDefaults.standard.object(forKey: "subscriptionRefreshSeconds") as? Int)
+    private var subscriptionTask: Task<Void,Never>?
+    func setSubscriptionRefreshInterval(_ seconds: Int) {
+        subscriptionRefreshInterval = SubscriptionRefreshPolicy.interval(seconds)
+        UserDefaults.standard.set(subscriptionRefreshInterval, forKey: "subscriptionRefreshSeconds")
+        subscriptionRefreshMessage = subscriptionRefreshInterval == 0 ? "套餐定时刷新已关闭" : "已设置" + SubscriptionRefreshPolicy.title(subscriptionRefreshInterval)
+    }
+    func refreshSubscription(manual: Bool = true) {
+        guard subscriptionTask == nil, snapshot.isConnected, let api else { return }
+        guard let name = NikkiData.matchingProvider(group: settings.group, selected: settings.provider, proxies: proxies, providers: providers),
+              let provider = providers[name], (provider["vehicleType"] as? String)?.lowercased() == "http" else {
+            if manual { subscriptionRefreshMessage = "当前未匹配到可更新的网络订阅" }; return
+        }
+        let now = Date(), key = SubscriptionRefreshPolicy.key(endpoint: settings.endpoint, provider: name)
+        let attempted = UserDefaults.standard.object(forKey: key) as? Date
+        var value = MonitorSnapshot(); NikkiData.subscription(provider, snapshot: &value)
+        guard SubscriptionRefreshPolicy.due(now: now, updated: value.subscriptionUpdatedAt, attempted: attempted, interval: subscriptionRefreshInterval, manual: manual) else {
+            if manual { subscriptionRefreshMessage = "刚刚已请求刷新，请稍候" }; return
+        }
+        UserDefaults.standard.set(now, forKey: key)
+        let token = generation
+        subscriptionRefreshing = true; subscriptionRefreshMessage = "正在更新套餐…"
+        subscriptionTask = Task {
+            do {
+                _ = try await api.json(["providers", "proxies", name], method: "PUT")
+                guard generation == token, !Task.isCancelled else { return }
+                let fresh = try await api.json(["providers", "proxies", name])
+                guard generation == token, !Task.isCancelled else { return }
+                providers[name] = fresh; applySubscription()
+                subscriptionRefreshMessage = "套餐已刷新 · " + Date().formatted(date: .omitted, time: .shortened)
+            } catch {
+                guard generation == token, !Task.isCancelled else { return }
+                subscriptionRefreshMessage = "套餐刷新失败，保留已有读数；下个周期再试"
+            }
+            subscriptionRefreshing = false; subscriptionTask = nil
+        }
+    }
     private var timer: Task<Void,Never>?
     private var polling: Task<Void,Never>?
     private var stream: Task<Void,Never>?
@@ -51,7 +90,7 @@ final class MonitorCoordinator: ObservableObject {
         }
     }
     func stop() {
-        generation = UUID(); timer?.cancel(); polling?.cancel(); stream?.cancel()
+        generation = UUID(); subscriptionTask?.cancel(); subscriptionTask = nil; subscriptionRefreshing = false; timer?.cancel(); polling?.cancel(); stream?.cancel()
         timer = nil; polling = nil; stream = nil
         socket?.cancel(with: .goingAway, reason: nil); socket = nil; api?.close(); api = nil; lastTraffic = nil
     }
@@ -105,6 +144,7 @@ final class MonitorCoordinator: ObservableObject {
                 snapshot.connectionCount = ConnectionMetrics.count(connections)
                 proxies = NikkiData.includingProviderNodes(p,providers:providers)
                 applyProxies()
+                refreshSubscription(manual: false)
             } catch {
                 guard generation == token, !Task.isCancelled else { return }
                 snapshot.isConnected = false; snapshot.connectionState = (error as? APIError)?.localizedDescription ?? ((error as? URLError)?.code == .notConnectedToInternet ? "请允许本地网络访问" : "旁路由暂时无法连接")

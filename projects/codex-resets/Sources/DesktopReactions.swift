@@ -91,10 +91,11 @@ struct DesktopReactionCanvas:View {
     private var latest:[ReactionHeart]=[]
     private var hitBranches:Set<String>=[]
     private var lastImpactCheck=Date()
+    private var waterRecordName="home-water.json"
     private func impacts(source:CGRect,target:CGRect?,area:CGRect,origin:CGPoint) {
         let now=Date();defer{lastImpactCheck=now}
         let alive=Set(latest.flatMap{[$0.id.uuidString+"-0",$0.id.uuidString+"-1"]});hitBranches.formIntersection(alive)
-        guard let target,let data=try? Data(contentsOf:GridPreferences.folder.appendingPathComponent("status/home-water.json")),
+        guard let target,let data=try? Data(contentsOf:GridPreferences.folder.appendingPathComponent("status/"+waterRecordName)),
          let record=try? JSONSerialization.jsonObject(with:data) as? [String:Double],let stamp=record["updated"],abs(now.timeIntervalSince1970-stamp)<3,
          let x=record["x"],let y=record["y"],let w=record["width"],let h=record["height"], [x,y,w,h].allSatisfy({$0.isFinite}),w>0,h>0 else{return}
         let water=CGRect(x:x-area.minX,y:area.maxY-y-h,width:w,height:h)
@@ -127,15 +128,30 @@ struct DesktopReactionCanvas:View {
         origin=point;update()
     }
     func setActive(_ enabled:Bool) {active=enabled;update()}
-    private func homeFrame(source:NSRect,screen:NSScreen)->NSRect? {
-        let file=GridPreferences.folder.appendingPathComponent("status/local.homeatlas.HomeEnergy.json")
-        guard let data=try? Data(contentsOf:file),
-              let presence=try? JSONDecoder().decode(CardPresence.self,from:data),
-              presence.id=="local.homeatlas.HomeEnergy",presence.visible,presence.frame.valid,
-              abs(presence.updated.timeIntervalSinceNow)<5,
-              screen.frame.contains(presence.frame.rect),
-              NSWorkspace.shared.runningApplications.contains(where:{$0.bundleIdentifier==presence.id}) else{return nil}
-        return ReactionCrossing.validTarget(presence.frame.rect,source:source)
+    private func waterTargetFrame(source:NSRect,screen:NSScreen)->NSRect? {
+        let candidates=["local.homeatlas.HomeEnergy":"home-water.json","local.homeatlas.MacVitals":"mac-water.json"]
+        var frames:[String:CGRect]=[:]
+        let running=Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        for (id,waterFile) in candidates {
+            let file=GridPreferences.folder.appendingPathComponent("status/"+id+".json")
+            guard running.contains(id),let bytes=try? Data(contentsOf:file),bytes.count<8192,
+                  let presence=try? JSONDecoder().decode(CardPresence.self,from:bytes),presence.id==id,
+                  presence.visible,presence.frame.valid,abs(presence.updated.timeIntervalSinceNow)<5,
+                  screen.frame.contains(presence.frame.rect) else{continue}
+            do {
+                let waterURL=GridPreferences.folder.appendingPathComponent("status/"+waterFile)
+                guard let bytes=try? Data(contentsOf:waterURL),bytes.count<8192,
+                      let water=try? JSONSerialization.jsonObject(with:bytes) as? [String:Double],
+                      let stamp=water["updated"],stamp.isFinite,abs(Date().timeIntervalSince1970-stamp)<3,
+                      let x=water["x"],let y=water["y"],let w=water["width"],let h=water["height"],
+                      [x,y,w,h].allSatisfy({$0.isFinite}),w>0,h>0,
+                      presence.frame.rect.contains(CGRect(x:x,y:y,width:w,height:h)) else{continue}
+            }
+            frames[id]=presence.frame.rect
+        }
+        guard let id=ReactionCrossing.nearestTarget(frames,source:source) else{return nil}
+        waterRecordName=candidates[id]!
+        return frames[id]
     }
     private func update() {
         guard active,!latest.isEmpty,!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
@@ -143,7 +159,7 @@ struct DesktopReactionCanvas:View {
               let screen=sourceWindow.screen,let origin else {
             panel?.orderOut(nil);timer?.invalidate();timer=nil;return
         }
-        let source=sourceWindow.frame,target=homeFrame(source:source,screen:screen)
+        let source=sourceWindow.frame,target=waterTargetFrame(source:source,screen:screen)
         let area=source.union(target ?? source).intersection(screen.frame)
         guard area.width>0,area.height>0 else{return}
         func converted(_ rect:CGRect)->CGRect {CGRect(x:rect.minX-area.minX,y:area.maxY-rect.maxY,width:rect.width,height:rect.height)}

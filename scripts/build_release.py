@@ -3,7 +3,7 @@
 import re,argparse,concurrent.futures,hashlib,json,shutil,subprocess,tempfile,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-ARCHIVES={'lunar-calendar':'万年历-Mac.zip','codex-resets':'Codex重置-Mac.zip','vpn-card':'FlClash实时卡片-Mac.zip','nikki-card':'Nikki实时卡片-Mac.zip','mac-vitals':'Mac实时监测-Mac.zip','desktop-toolbox':'HomeAtlasToolbox-1.0.0-macOS.zip'}
+ARCHIVES={'home-overview':'家庭概览-Mac.zip','lunar-calendar':'万年历-Mac.zip','codex-resets':'Codex重置-Mac.zip','vpn-card':'FlClash实时卡片-Mac.zip','nikki-card':'Nikki实时卡片-Mac.zip','mac-vitals':'Mac实时监测-Mac.zip','desktop-toolbox':'HomeAtlasToolbox-1.0.2-macOS.zip'}
 def normalize_archive(archive):
     # ditto emits legacy UTF-8 names without bit 11. zipfile append can rewrite
     # its central directory as CP437 text; normalize both headers together.
@@ -22,12 +22,13 @@ def main():
     stage=Path(tempfile.mkdtemp(prefix='mac-desktop-kit-public-'))
     for slug in (args.projects or ARCHIVES):
         shutil.copytree(ROOT/'projects'/slug,stage/'projects'/slug,ignore=shutil.ignore_patterns('交付','__pycache__','*.xcodeproj','build-products.json','build-result.json','app-Info.plist','widget-Info.plist'))
+    shutil.copytree(ROOT/'shared', stage/'shared', ignore=shutil.ignore_patterns('__pycache__'))
     def build(slug):
         project=stage/'projects'/slug
         r=subprocess.run(['python3','build.py'],cwd=project,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
         (output/(slug+'.build.log')).write_text(r.stdout)
         if r.returncode:raise RuntimeError('Build failed: '+slug)
-        record_path=project/'交付/build-result.json'
+        record_path=project/('build-products.json' if slug == 'home-overview' else '交付/build-result.json')
         record=json.loads(record_path.read_text());app=Path(record['app'])
         subprocess.run(['codesign','--verify','--deep','--strict',str(app)],check=True)
         # Temporary Xcode build products must not replace installed widget registrations.

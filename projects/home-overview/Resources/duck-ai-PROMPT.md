@@ -1,0 +1,9 @@
+内置 image_gen 生成，transparent_background=true。未经本地修图，原始透明PNG直接用于动画素材。
+
+Use case: stylized-concept. Asset type: transparent PNG sprite for a tiny macOS glass dashboard animation. Create ONE exceptionally cute original yellow rubber duck, in a right-facing three-quarter side view, slightly facing the viewer. Oversized soft round head, plump squat body, tiny rounded wings, very short wide orange bill with a gentle smile, glossy dark round eyes with tiny highlights, subtle peach blush cheeks. A premium soft 3D toy / clay illustration, buttery yellow, soft studio light, smooth rounded silhouette and restrained highlights. The entire duck is visible and centered, occupies most of a square canvas with modest transparent padding. Intended to be readable at only 25 pixels tall. No accessories, no text, no watermark, no pedestal, no water, no ripples, no cast shadow outside the duck. Fully transparent background, clean antialiased alpha edges. Duck sits naturally with a nearly level rounded underside so it can be placed on animated water.
+
+## Seasonal variants
+
+AI-generated edits of the original duck retain its identity, pose and framing. Spring: one small daisy; summer: glossy dark sunglasses; winter: red knitted scarf; rain: translucent iridescent holographic plastic rain hat. Transparent backgrounds. No third-party character assets. Snow-covered scarf duck is an AI edit preserving framing, with fluffy settled snow on crown/back/wing. Native drawing crossfades clean and snow sprites for accumulation/clearing. The black-and-ivory duck skeleton is another AI edit preserving the original silhouette and pose. Football uses original Canvas rendering.
+
+The app-local hand cursor is an original AI-generated four-digit white glove with a shorter index, navy outline, pastel blue cuff and counter-clockwise tilt. It is separate from system-wide cursor settings. Hotspot is measured at the opaque fingertip.

@@ -4,6 +4,11 @@ import CoreGraphics
 /// Desktop-only crossing rule; never steers or attracts a particle toward a target.
 enum ReactionCrossing {
     enum Symbol {case heart,bolt}
+    static func nearestTarget(_ candidates:[String:CGRect],source:CGRect)->String? {
+        candidates.filter{validTarget($0.value,source:source) != nil}.sorted {
+            $0.value.maxX == $1.value.maxX ? $0.key < $1.key : $0.value.maxX > $1.value.maxX
+        }.first?.key
+    }
     static func validTarget(_ target:CGRect?,source:CGRect)->CGRect? {
         guard let target,target.width>0,target.height>0,
               target.maxX<=source.minX+1,source.minX-target.maxX<=180,

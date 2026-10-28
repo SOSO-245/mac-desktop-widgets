@@ -7,7 +7,7 @@ def run(slug):
     p=ROOT/'projects'/slug
     with tempfile.TemporaryDirectory(prefix='desktop-kit-test-') as tmp:
         commands={
-            'mac-vitals':[['xcrun','swiftc','-parse-as-library','Sources/Metrics.swift','Tests/CoreTests.swift','-o',str(Path(tmp)/'core')],[str(Path(tmp)/'core')]],
+            'mac-vitals':[['bash','Tests/run-duck-tests.sh'],['xcrun','swiftc','-parse-as-library','Sources/Metrics.swift','Tests/CoreTests.swift','-o',str(Path(tmp)/'core')],[str(Path(tmp)/'core')]],
             'codex-resets':[
                 ['bash','Tests/run-tests.sh']],
             'vpn-card':[['bash','Tests/run-tests.sh'],['bash','Tests/run-shadowrocket-tests.sh'],['bash','Tests/run-site-tests.sh'],['bash','Tests/run-traffic-tests.sh'],['bash','Tests/run-node-tests.sh'],['bash','Tests/run-shadowrocket-node-tests.sh'],['bash','Tests/run-node-picker-tests.sh']],
@@ -34,6 +34,7 @@ def run(slug):
             executable=str(Path(tmp)/name)
             commands += [['xcrun','swiftc','-swift-version','5','-parse-as-library',*sources,'-o',executable],[executable]]
         if slug=='nikki-card':
+            commands += [['xcrun','swiftc','-parse-as-library','Sources/SubscriptionRefresh.swift','Tests/SubscriptionRefreshTests.swift','-o',str(Path(tmp)/'subscription-tests')],[str(Path(tmp)/'subscription-tests')]]
             commands += [['xcrun','swiftc','-parse-as-library','Sources/Model.swift','Sources/WidgetData.swift','Tests/WidgetTests.swift','-o',str(Path(tmp)/'widget-tests')],[str(Path(tmp)/'widget-tests')]]
         if (p/'Sources/WidgetSelfRepair.swift').exists():
             commands += [['xcrun','swiftc','-swift-version','5','-parse-as-library','Sources/WidgetSelfRepair.swift','Tests/RepairTests.swift','-o',str(Path(tmp)/'repair')],[str(Path(tmp)/'repair')]]

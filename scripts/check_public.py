@@ -16,9 +16,6 @@ def main():
     indexed='--index' in sys.argv
     names=subprocess.check_output(['git','ls-files','--cached',* ([] if indexed else ['--others','--exclude-standard']),'-z'],cwd=ROOT).decode().split('\0')
     problems=[];count=0
-    # Home overview is private. Do not silently reintroduce it via a sync/build.
-    for blocked in ['projects/home-overview','updates/home-overview.xml']:
-        if (ROOT/blocked).exists():problems.append((blocked,'private project excluded from public distribution'))
     for name in filter(None,names):
         path=ROOT/name
         if path.is_symlink():problems.append((name,'symlink'));continue

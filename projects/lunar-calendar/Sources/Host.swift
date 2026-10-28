@@ -8,13 +8,21 @@ import ServiceManagement
     @Published var selected=Almanac.clamp(Date())
     @Published var holidays=HolidayStore.cached()
     @Published var busy=false
-    @Published var data=CalendarDataStore.load()
+    @Published var data=CalendarDataStore.load() {didSet {publishBirthdayBadge()}}
     @Published var storageNote=""
     @Published var showBirthdayEditor=false
     @Published var showScheduleEditor=false
     @Published var showAgenda=false
     let cloudSync=CalendarCloudSync()
     var editingBirthday:Birthday?
+    func publishBirthdayBadge(now:Date=Date()) {
+        var calendar=Calendar(identifier:.gregorian);calendar.timeZone=TimeZone(identifier:"Asia/Shanghai")!
+        guard let end=calendar.date(byAdding:.day,value:1,to:calendar.startOfDay(for:now)) else{return}
+        let record:[String:Any] = ["active":data.birthdays.contains{$0.valid && $0.occurs(on:now)},"generatedAt":now.timeIntervalSince1970,"validUntil":end.timeIntervalSince1970]
+        let folder=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/HomeAtlasToolbox/status")
+        try? FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        if let bytes=try? JSONSerialization.data(withJSONObject:record) {try? bytes.write(to:folder.appendingPathComponent("calendar-birthday.json"),options:.atomic)}
+    }
     func addBirthday(_ birthday:Birthday)->Bool {
         var next=data
         next.birthdays.removeAll {$0.id==birthday.id || (birthday.contactID != nil && $0.contactID==birthday.contactID)}
@@ -258,6 +266,7 @@ struct MenuCalendar:View {
         })
         weather.start()
         model.cloudSync.start(model:model)
+        model.publishBirthdayBadge()
         NotificationCenter.default.addObserver(self,selector:#selector(syncAppearanceApplied),name:Notification.Name("CalendarSyncApplied"),object:nil)
         scheduleMidnightUpdate()
         wakeObserver=NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didWakeNotification,object:nil,queue:.main) {[weak self] _ in Task {@MainActor in self?.checkMidnightUpdate()}}
@@ -296,7 +305,7 @@ struct MenuCalendar:View {
         refreshStatus()
         appearanceObserver=status?.button?.observe(\.effectiveAppearance,options:[.new]) {[weak self] _,_ in DispatchQueue.main.async {self?.refreshStatus()}}
         preferencesObserver=model.$data.dropFirst().sink {[weak self] _ in DispatchQueue.main.async {self?.refreshStatus()}}
-        clock=Timer.scheduledTimer(withTimeInterval:60,repeats:true) {[weak self] _ in Task {@MainActor in self?.refreshStatus();await self?.model.update()}}
+        clock=Timer.scheduledTimer(withTimeInterval:60,repeats:true) {[weak self] _ in Task {@MainActor in self?.refreshStatus();self?.model.publishBirthdayBadge();await self?.model.update()}}
     }
     func scheduleMidnightUpdate() {
         midnightClock?.invalidate()

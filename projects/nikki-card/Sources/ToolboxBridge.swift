@@ -5,7 +5,7 @@ import SwiftUI
 @MainActor final class ToolboxBridge:NSObject {
     static let shared=ToolboxBridge()
     static let command=Notification.Name("local.homeatlas.toolbox.command.v1")
-    private var showAction:((Bool)->Void)?;private var sizeAction:((String)->Void)?
+    private var showAction:((Bool)->Void)?;private var sizeAction:((String)->Void)?;private var smallWidthAction:(()->Double)?
     private var timer:Timer?;private var moveWork:DispatchWorkItem?;private var applying=false
     private var tokens:[NSObjectProtocol]=[]
     private var id:String{Bundle.main.bundleIdentifier ?? ""}
@@ -13,8 +13,8 @@ import SwiftUI
         ["LiveDesktopCard","FlClashLiveCard","NikkiLiveCard"].contains(w.identifier?.rawValue ?? "") || (id=="local.homeatlas.MacVitals" && w.title=="Mac 实时监测" && w is NSPanel)
     }}
     var size:String{UserDefaults.standard.string(forKey:id=="local.homeatlas.FlClashMonitor" || id=="local.homeatlas.NikkiMonitor" || id=="local.homeatlas.MacVitals" ? "cardSize":"desktopCard.size") ?? "medium"}
-    func start(show:@escaping(Bool)->Void,size:@escaping(String)->Void) {
-        showAction=show;sizeAction=size;guard timer==nil else{return}
+    func start(show:@escaping(Bool)->Void,size:@escaping(String)->Void,smallWidth:(()->Double)?=nil) {
+        showAction=show;sizeAction=size;smallWidthAction=smallWidth;guard timer==nil else{return}
         DistributedNotificationCenter.default().addObserver(self,selector:#selector(receive(_:)),name:Self.command,object:nil)
         tokens.append(NotificationCenter.default.addObserver(forName:NSWindow.didMoveNotification,object:nil,queue:.main) {[weak self] n in
             Task{@MainActor in guard let self,let w=n.object as? NSWindow,w===self.panel,!self.applying else{return};self.scheduleSnap()}
@@ -51,7 +51,7 @@ import SwiftUI
         p.saveFrame(usingName:key);DispatchQueue.main.async{self.applying=false};publish()
     }
     func publish(){guard let p=panel,ToolModule.all.contains(where:{$0.id==id}) else{return}
-        let s=CardPresence(id:id,updated:Date(),visible:p.isVisible,size:size,frame:CardPlacement(p.frame),glass:DesktopCardAppearance.shared.effectiveGlass,brightness:DesktopCardAppearance.shared.brightness,transparency:DesktopCardAppearance.shared.transparency)
+        let s=CardPresence(id:id,updated:Date(),visible:p.isVisible,size:size,frame:CardPlacement(p.frame),glass:DesktopCardAppearance.shared.effectiveGlass,brightness:DesktopCardAppearance.shared.brightness,transparency:DesktopCardAppearance.shared.transparency,smallWidth:smallWidthAction?())
         let folder=GridPreferences.folder.appendingPathComponent("status");try? FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
         if let data=try? JSONEncoder().encode(s){try? data.write(to:folder.appendingPathComponent(id+".json"),options:.atomic)}
     }
