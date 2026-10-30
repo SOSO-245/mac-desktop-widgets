@@ -8,3 +8,6 @@ for slug in ['lunar-calendar','codex-resets','vpn-card','nikki-card','mac-vitals
   shutil.copy2(root/'shared/toolbox'/name,root/'projects'/slug/'Sources'/name)
 shutil.copy2(root/'shared/toolbox/ToolboxShared.swift',root/'projects/desktop-toolbox/Sources/ToolboxShared.swift')
 print('Layout-only shared sources synchronized')
+
+# API Usage has its own bridge adapter; share only the layout model.
+shutil.copy2(root/'shared/toolbox/ToolboxShared.swift',root/'projects/api-usage/Sources/ToolboxShared.swift')

@@ -36,3 +36,8 @@ Mac 实时监测：18 项采集解析、时效与网卡计数差值检查，以�
 手机测试：在 projects/codex-resets/scriptable 运行 `node Tests/run-tests.js` 和 `node Tests/update-tests.js`。
 
 真实更新隔离测试：`python3 shared/updater/Tests/run-integration.py`。创建独立测试钥匙串账号和临时应用，仅监听回环地址；分别验证成功替换、坏包拒绝、坏清单拒绝。不会给真实五款应用安装测试版本。
+
+## API 用量卡片
+`python3 projects/api-usage/test.py` 运行 API 与布局桥接隔离测试。
+`python3 scripts/build_release.py --projects api-usage desktop-toolbox --output /tmp/api-release` 构建两个增量包。
+API 卡片与桌面工具箱采用手动更新，不进入六款 Sparkle 自动更新清单。

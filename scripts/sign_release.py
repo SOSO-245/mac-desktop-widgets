@@ -43,12 +43,14 @@ def audit_assets(assets):
     rows = json.loads((assets / 'manifest.json').read_text())
     if not isinstance(rows, list):
         raise ValueError('Expected all six audited apps')
-    feeds = [row for row in rows if row.get('project') != 'desktop-toolbox']
-    if len(feeds) != len(PRODUCTS) or {row.get('project') for row in feeds} != set(PRODUCTS) or len(rows)-len(feeds)>1:
+    feeds = [row for row in rows if row.get('project') not in ['desktop-toolbox','api-usage']]
+    if len(feeds) != len(PRODUCTS) or {row.get('project') for row in feeds} != set(PRODUCTS) or len(rows)-len(feeds)>2:
         raise ValueError('Expected one entry for each known app')
-    toolbox = [row for row in rows if row.get('project') == 'desktop-toolbox']
+    toolbox = [row for row in rows if row.get('project') in ['desktop-toolbox','api-usage']]
+    if len({row['project'] for row in toolbox}) != len(toolbox):
+        raise ValueError('Duplicate manual app')
     for row in toolbox:
-        if row.get('archive') != 'desktop-toolbox-macos.zip':
+        if row.get('archive') != row['project'] + '-macos.zip':
             raise ValueError('Unexpected toolbox archive')
         path = assets / row['archive']
         if hashlib.sha256(path.read_bytes()).hexdigest() != row.get('sha256'):
@@ -60,7 +62,7 @@ def audit_assets(assets):
             if len(names) != 1:
                 raise ValueError('Expected one toolbox app')
             info = plistlib.loads(package.read(names[0]))
-            if info['CFBundleIdentifier'] != 'local.homeatlas.Toolbox':
+            if info['CFBundleIdentifier'] != {'desktop-toolbox':'local.homeatlas.Toolbox','api-usage':'local.homeatlas.APIUsage'}[row['project']]:
                 raise ValueError('Toolbox identity mismatch')
             for key, source in [('version','CFBundleShortVersionString'),('build','CFBundleVersion')]:
                 if row.get(key) != info[source]:

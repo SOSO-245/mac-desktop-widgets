@@ -66,7 +66,7 @@ import ServiceManagement
     }
     func dimensions(_ id:String)->NSSize {
         let size=sizes[id] ?? states[id]?.size ?? "medium"
-        let narrow=["local.homeatlas.HomeEnergy","local.homeatlas.CodexResets","local.homeatlas.LunarCalendar"].contains(id)
+        let narrow=["local.homeatlas.HomeEnergy","local.homeatlas.CodexResets","local.homeatlas.LunarCalendar","local.homeatlas.APIUsage"].contains(id)
         let reported=states[id]?.smallWidth
         let width=reported.flatMap{($0.isFinite && (100...344).contains($0)) ? $0:nil} ?? (narrow ? 164:220)
         return NSSize(width:size=="small" ? width:344,height:size=="large" ? 344:164)
@@ -183,7 +183,7 @@ struct ToolboxView:View {
             ScrollView {
                 VStack(alignment:.leading,spacing:16){
                     Text("桌面工具箱").font(.title.bold())
-                    Text("六款独立运行，按需组合。").foregroundStyle(.secondary)
+                    Text("七款独立运行，按需组合。").foregroundStyle(.secondary)
                     ForEach(model.modules){m in
                         VStack(alignment:.leading,spacing:8){
                             HStack{

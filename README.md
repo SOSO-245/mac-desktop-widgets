@@ -2,6 +2,15 @@
 
 六款中文原生 Mac 桌面工具及桌面工具箱：家庭概览、万年历、Codex 重置、VPN 实时卡片、Nikki 实时卡片、Mac 实时监测。SwiftUI / AppKit / WidgetKit，macOS 14 及以上。
 
+
+## API 用量卡片与工具箱更新 · 2026.10.30
+
+[下载 API 用量卡片 1.1.0 与桌面工具箱 1.0.3](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.30-api1)
+
+新增 [API 用量卡片](projects/api-usage)：OpenAI 官方 API 本月费用、Token 与请求数，紫色柱状图支持 24小时/7天；DeepSeek 账户余额。点击平台数据进入官方网页。**这不是 ChatGPT/Codex 订阅套餐监测。** OpenAI 需要组织 Admin Key；DeepSeek 本月费用、OpenAI 余额与硅基流动国内自动账单暂不可用，界面明确标注。首次需自行配置密钥。
+
+桌面工具箱可统一管理 API 卡片尺寸、位置、显隐、毛玻璃与透明度；保留原有六款。API 卡片与工具箱为手动更新，Apple Silicon/macOS 14+；没有 WidgetKit 扩展。本次增量发布不替换下方旧全套安装包。
+
 [下载安装包](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.28-r2) · [构建与使用](docs/BUILD.md) · [隐私与权限](docs/PRIVACY.md) · [第三方来源](THIRD-PARTY-NOTICES.md)
 
 本次版本：[v2026.10.28-r2](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.28-r2)。六款工具与桌面工具箱的安装包、源码和校验清单见发布页。

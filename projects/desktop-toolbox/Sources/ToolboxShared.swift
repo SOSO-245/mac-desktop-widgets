@@ -8,7 +8,8 @@ struct ToolModule:Identifiable,Codable {
         .init(id:"local.homeatlas.CodexResets",name:"重置监测",appName:"Codex 重置",symbol:"arrow.triangle.2.circlepath"),
         .init(id:"local.homeatlas.NikkiMonitor",name:"Nikki",appName:"Nikki 实时卡片",symbol:"wifi.router.fill"),
         .init(id:"local.homeatlas.FlClashMonitor",name:"VPN 监测",appName:"FlClash 实时卡片",symbol:"network"),
-        .init(id:"local.homeatlas.MacVitals",name:"Mac 监测",appName:"Mac 实时监测",symbol:"desktopcomputer")]
+        .init(id:"local.homeatlas.MacVitals",name:"Mac 监测",appName:"Mac 实时监测",symbol:"desktopcomputer"),
+        .init(id:"local.homeatlas.APIUsage",name:"API 用量",appName:"API用量卡片",symbol:"chart.bar.xaxis")]
 }
 struct CardPlacement:Codable,Equatable {var x:Double;var y:Double;var width:Double;var height:Double
     init(_ r:NSRect){x=r.minX;y=r.minY;width=r.width;height=r.height}
