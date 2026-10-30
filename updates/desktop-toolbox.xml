@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>desktop-toolbox 软件更新</title><item><title>1.1.0</title><sparkle:version>20261030181256</sparkle:version><sparkle:shortVersionString>1.1.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion><description>工具箱统一更新与桌面显隐、防重叠；Nikki 双来源监测。保留各应用连接与外观设置。</description><enclosure url="https://github.com/SOSO-245/mac-desktop-widgets/releases/download/v2026.10.30-suite1/desktop-toolbox-macos.zip" length="2430743" type="application/octet-stream" sparkle:edSignature="njIyFmn83QKCtszT4cnwSnWhKoz2oEDT+9VIVCn9vPN4I9zmQhfNhrWAAIGt4txklNASy8LXmw4QbrNpx2vBCg=="></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: WPewYBWbQuiPsk5o0w2H3EyjVAXCTn0RJzltOLKKpjwz8a2fC6x1RrJNVTT5AhXKWl1xoqhqF/5XPOHjhF7bCw==
+length: 1096
+-->
