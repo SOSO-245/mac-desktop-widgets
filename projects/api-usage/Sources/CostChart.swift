@@ -48,7 +48,7 @@ struct UsageBars: View {
                     BarMark(x: .value("时间", p.date, unit: range == "24h" ? .hour : .day), y: .value("Token", p.tokens))
                         .foregroundStyle(Color(red: 0.52, green: 0.38, blue: 0.96)).cornerRadius(2)
                 }.chartXAxis(.hidden).chartYAxis(.hidden).frame(height: height)
-                .overlay(alignment: .bottom) { Rectangle().fill(muted.opacity(0.35)).frame(height: 0.5).allowsHitTesting(false) }
+                .overlay(alignment: .bottom) { Rectangle().fill(Color(red: 0.52, green: 0.38, blue: 0.96)).frame(height: 1.2).allowsHitTesting(false) }
                 .chartYScale(domain: .automatic(includesZero: true))
                 .help("\(range == "24h" ? "24 小时（含当前未完整小时）" : "7 天（UTC，含今天）") · \(compact(record.value.reduce(0) { $0 + $1.tokens })) Token · 更新 \(record.date.formatted())")
                 if error != nil { Text("刷新失败 · 保留上次趋势").font(.system(size: 8)).foregroundStyle(.orange) }
