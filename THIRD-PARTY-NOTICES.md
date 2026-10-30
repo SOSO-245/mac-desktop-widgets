@@ -18,7 +18,7 @@ Mac 实时监测分发并调用未修改的 macmon v0.10.0 官方 Apple Silicon 
 
 ## Sparkle
 
-五款使用 [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0)，保留官方框架签名。许可及其第三方依赖声明在各项目 Updater/Sparkle-LICENSE，发布 ZIP 根目录也包含 Sparkle-LICENSE.txt。归档 SHA256 固定于 updater_build.py。
+六款工具及 API 用量卡片使用 [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0)，保留官方框架签名。许可及其第三方依赖声明在各项目 Updater/Sparkle-LICENSE，发布 ZIP 根目录也包含 Sparkle-LICENSE.txt。归档 SHA256 固定于 updater_build.py。
 
 ## Electric Border CSS (visual reference for Codex Resets)
 

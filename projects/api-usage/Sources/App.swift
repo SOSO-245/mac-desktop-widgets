@@ -41,6 +41,8 @@ final class CardPanel: NSPanel {
             desktop.setFrameOrigin(NSPoint(x: screen.visibleFrame.maxX - desktop.frame.width - 24, y: screen.visibleFrame.maxY - desktop.frame.height - 24))
         }
         ToolboxBridge.shared.start(panel: desktop, changed: { [weak self] in self?.apply() }, settings: { [weak self] in self?.showSettings() })
+        AppUpdater.shared.beforeShowingUpdate = { [weak self] in self?.closePopover() }
+        AppUpdater.shared.attach(to: status)
         store.start(); updateStatus()
         if !store.hasOpenAI && !store.hasDeepSeek { showSettings() }
     }

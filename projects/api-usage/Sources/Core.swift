@@ -31,6 +31,11 @@ struct Snapshot: Codable {
 }
 struct Month {
     let start: Date; let end: Date; let id: String
+    // Costs uses daily buckets. Ending inside today omits today's bucket;
+    // request through the next UTC midnight to include today's reported costs.
+    var costsEndExclusive: Date {
+        Date(timeIntervalSince1970: (floor(end.timeIntervalSince1970 / 86400) + 1) * 86400)
+    }
     init(now: Date = Date()) {
         var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(secondsFromGMT: 0)!
         start = c.date(from: c.dateComponents([.year, .month], from: now))!
@@ -72,7 +77,8 @@ final class APIClient {
         var all = [[String: Any]](); var cursor: String?; var seen = Set<String>()
         for _ in 0..<100 {
             var u = URLComponents(string: "https://api.openai.com/v1/organization/" + path)!
-            u.queryItems = [URLQueryItem(name: "start_time", value: String(Int((since ?? month.start).timeIntervalSince1970))), URLQueryItem(name: "end_time", value: String(Int(month.end.timeIntervalSince1970))), URLQueryItem(name: "bucket_width", value: width), URLQueryItem(name: "limit", value: "31")]
+            let queryEnd = path == "costs" ? month.costsEndExclusive : month.end
+            u.queryItems = [URLQueryItem(name: "start_time", value: String(Int((since ?? month.start).timeIntervalSince1970))), URLQueryItem(name: "end_time", value: String(Int(queryEnd.timeIntervalSince1970))), URLQueryItem(name: "bucket_width", value: width), URLQueryItem(name: "limit", value: "31")]
             if !project.isEmpty { u.queryItems!.append(URLQueryItem(name: "project_ids", value: project)) }
             if let cursor { u.queryItems!.append(URLQueryItem(name: "page", value: cursor)) }
             let j = try await get(u.url!, key: key)

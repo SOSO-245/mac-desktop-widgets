@@ -2,11 +2,12 @@ import Foundation
 final class Mock: URLProtocol {
     static var responses: [(Int, String)] = []
     static var requests: [URLRequest] = []
+    static var responder: ((URLRequest) -> (Int, String))?
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         Self.requests.append(request)
-        let (status, json) = Self.responses.removeFirst()
+        let (status, json) = Self.responder?(request) ?? Self.responses.removeFirst()
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(json.utf8)); client?.urlProtocolDidFinishLoading(self)
     }
@@ -71,6 +72,38 @@ final class Mock: URLProtocol {
         check(weekly.first?.tokens == 0,"explicit empty usage bucket")
         let weeklyQuery = URLComponents(url:Mock.requests.last!.url!,resolvingAgainstBaseURL:false)!.queryItems!
         check(weeklyQuery.contains { $0.name == "start_time" && $0.value == String(day - 6*86400) },"7 day window")
+        check(weeklyQuery.contains { $0.name == "end_time" && $0.value == String(Int(now.timeIntervalSince1970)) },"usage keeps the current partial day")
+        check(hourlyQuery.contains { $0.name == "end_time" && $0.value == String(Int(now.timeIntervalSince1970)) },"hourly usage still ends at now")
+
+        // Regression: the real Costs endpoint omitted today's amount when end_time
+        // was inside today's daily bucket, even with has_more=false.
+        let today = ISO8601DateFormatter().date(from:"2026-10-30T02:46:00Z")!
+        let todayStart = Int(ISO8601DateFormatter().date(from:"2026-10-30T00:00:00Z")!.timeIntervalSince1970)
+        Mock.responder = { request in
+            let params = URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!.queryItems!
+            let end = Int(params.first { $0.name == "end_time" }!.value!)!
+            var buckets: [[String:Any]] = [["start_time": todayStart-86400, "results": [["amount": ["value": "12.30", "currency": "usd"]]]]]
+            if end >= todayStart+86400 {
+                buckets.append(["start_time": todayStart, "results": [["amount": ["value": "4.56", "currency": "usd"]]]])
+            }
+            return (200,String(data:try! JSONSerialization.data(withJSONObject:["data":buckets,"has_more":false]),encoding:.utf8)!)
+        }
+        let currentCosts = try await c.costReport(key:"test-only",month:Month(now:today),project:"")
+        check(currentCosts.totals["USD"] == Decimal(string:"16.86"),"month includes today's reported costs")
+        check(currentCosts.points.count == 2 && currentCosts.points.last?.amount == Decimal(string:"4.56"),"today's cost bucket retained")
+        Mock.responder = nil
+        for (timestamp,expectedStart,expectedEnd) in [
+            ("2026-10-30T00:00:00Z","2026-10-01T00:00:00Z","2026-10-31T00:00:00Z"),
+            ("2026-10-31T23:59:59Z","2026-10-01T00:00:00Z","2026-11-01T00:00:00Z"),
+            ("2026-11-01T00:00:00Z","2026-11-01T00:00:00Z","2026-11-02T00:00:00Z")
+        ] {
+            let f = ISO8601DateFormatter(), range = Month(now:ISO8601DateFormatter().date(from:timestamp)!)
+            Mock.responses = [(200,#"{"data":[],"has_more":false}"#)]
+            _ = try await c.costReport(key:"test-only",month:range,project:"")
+            let params = URLComponents(url:Mock.requests.last!.url!,resolvingAgainstBaseURL:false)!.queryItems!
+            check(params.contains { $0.name == "start_time" && $0.value == String(Int(f.date(from:expectedStart)!.timeIntervalSince1970)) },"cost month start at \(timestamp)")
+            check(params.contains { $0.name == "end_time" && $0.value == String(Int(f.date(from:expectedEnd)!.timeIntervalSince1970)) },"cost daily boundary at \(timestamp)")
+        }
         var snapshot = Snapshot(); snapshot.usage = Record(value:usage,date:Date(),period:month.id)
         let roundTrip = try JSONDecoder().decode(Snapshot.self,from:JSONEncoder().encode(snapshot))
         check(roundTrip.usage?.value == usage,"cache roundtrip")

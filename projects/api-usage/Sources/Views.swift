@@ -218,6 +218,7 @@ struct SettingsPanel: View {
                         }
                     }.padding(10)
                 }
+                GroupBox("软件更新") { AppUpdater.shared.settingsContent.padding(10) }
                 HStack { Button(store.refreshing ? "正在刷新…" : "刷新全部") { Task { await store.refresh() } }.disabled(store.refreshing); Text(store.message).foregroundStyle(.secondary) }
                 Text("密钥仅保存在本机钥匙串。只读统计，不发起模型调用。缓存数据可能滞后，以平台账单为准。").font(.caption).foregroundStyle(.secondary)
             }.padding(26)
