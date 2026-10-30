@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>API 用量卡片 软件更新</title><link>https://github.com/SOSO-245/mac-desktop-widgets/releases</link><item><title>1.2.0</title><sparkle:version>20261030110750</sparkle:version><sparkle:shortVersionString>1.2.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion><description>新增独立软件更新：每天检查、手动检查与可选自动下载。修复本月费用遗漏 UTC 当天的问题。保留原连接、卡片外观和数据刷新设置。应用仍未经过 Apple 公证。</description><enclosure url="https://github.com/SOSO-245/mac-desktop-widgets/releases/download/v2026.10.30-api2/api-usage-macos.zip" length="2723135" type="application/octet-stream" sparkle:edSignature="ElO5Db+Vu1eN1F5zPyLOJPdZTdYSKozilQlUMmhgw24igILtSnskz5js57LTkWa6bWxPdsNhiYMgnzrGI6CvCQ=="></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: ULMUOrxIglj6+RniCIMeCokm9WKqMZR96ap1YevNv8ghKdl1sq9vVIncLtVhLr5DcwZ90XLlU0gBPifVG4FkBg==
+length: 1257
+-->
