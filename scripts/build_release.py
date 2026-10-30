@@ -3,7 +3,7 @@
 import re,argparse,concurrent.futures,hashlib,json,shutil,subprocess,tempfile,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-ARCHIVES={'home-overview':'家庭概览-Mac.zip','lunar-calendar':'万年历-Mac.zip','codex-resets':'Codex重置-Mac.zip','vpn-card':'FlClash实时卡片-Mac.zip','nikki-card':'Nikki实时卡片-Mac.zip','mac-vitals':'Mac实时监测-Mac.zip','desktop-toolbox':'HomeAtlasToolbox-1.0.3-macOS.zip','api-usage':'API用量卡片-1.3.0-macOS.zip'}
+ARCHIVES={'home-overview':'家庭概览-Mac.zip','lunar-calendar':'万年历-Mac.zip','codex-resets':'Codex重置-Mac.zip','vpn-card':'FlClash实时卡片-Mac.zip','nikki-card':'Nikki实时卡片-Mac.zip','mac-vitals':'Mac实时监测-Mac.zip','desktop-toolbox':'HomeAtlasToolbox-1.1.0-macOS.zip','api-usage':'API用量卡片-1.3.0-macOS.zip'}
 def normalize_archive(archive):
     # ditto emits legacy UTF-8 names without bit 11. zipfile append can rewrite
     # its central directory as CP437 text; normalize both headers together.

@@ -9,6 +9,24 @@ import Foundation
             check((try? ConnectionSettings.normalized(bad)) == nil,"reject URL")
         }
         check((try? ConnectionSettings.normalized(" http://127.0.0.1:9090/ ")) == "http://127.0.0.1:9090","normalize")
+        let suite = "NikkiProfilesTest." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var legacy = ConnectionSettings(); legacy.endpoint = "http://127.0.0.1:12345"; legacy.group = "original"
+        defaults.set(try JSONEncoder().encode(legacy), forKey: "connection")
+        var profiles = ConnectionProfiles.load(defaults)
+        check(profiles.selected == .nikki && profiles.connection(.nikki) == legacy, "legacy profile migration")
+        var other = legacy; other.endpoint = "http://127.0.0.1:23456"; other.group = "other"
+        profiles.entries[MonitorSource.metacubexd.rawValue] = other
+        profiles.selected = .metacubexd; profiles.save(defaults)
+        let restored = ConnectionProfiles.load(defaults)
+        check(restored.selected == .metacubexd && restored.connection(.metacubexd) == other, "selected source persisted")
+        check(restored.connection(.nikki) == legacy, "original profile preserved")
+        check(ConnectionProfiles().connection(.metacubexd).endpoint.isEmpty, "no guessed controller port")
+        check((try? ConnectionProfiles.dashboardURL("http://127.0.0.1:12345/#/")) != nil, "dashboard root fragment accepted")
+        for bad in ["file:///tmp/test", "http://user:password@example.com", "http://example.com/?secret=test", "http://example.com/#/?secret=test"] {
+            check((try? ConnectionProfiles.dashboardURL(bad)) == nil, "dashboard rejects credential URLs")
+        }
         let nodes: [String:[String:Any]] = ["组":["type":"Selector","now":"下一级"],"下一级":["type":"URLTest","now":"节点"],"节点":["type":"ss"],"环":["now":"环"],"平衡":["all":["节点"],"type":"LoadBalance"]]
         check(NikkiData.leaf("组",proxies:nodes) == "节点","nested leaf")
         check(NikkiData.leaf("环",proxies:nodes) == nil,"cycle")

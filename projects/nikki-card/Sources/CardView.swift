@@ -23,6 +23,8 @@ struct NikkiCard: View {
     let onToggleLock: () -> Void
     let onQuit: () -> Void
 
+    var sourceTitle: String? = nil
+    var onSwitchNodes: (() -> Void)? = nil
     var onTrafficScope: (TrafficScope) -> Void = { _ in }
     var onAppearance:(()->Void)? = nil
 
@@ -78,9 +80,9 @@ struct NikkiCard: View {
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
-            .help("打开 \(snapshot.client.title)")
-            .accessibilityLabel("打开 \(snapshot.client.title)")
-            Text(snapshot.client.title)
+            .help("打开 \((sourceTitle ?? snapshot.client.title))")
+            .accessibilityLabel("打开 \((sourceTitle ?? snapshot.client.title))")
+            Text((sourceTitle ?? snapshot.client.title))
                 .font(.system(size: 13, weight: .semibold))
                 .fixedSize()
             if size != .small {
@@ -119,8 +121,9 @@ struct NikkiCard: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("切换节点")
-            .accessibilityLabel("切换节点")
+            .help("左键切换监测来源，右键选择节点")
+            .accessibilityLabel("切换监测来源")
+            .contextMenu { Button("切换节点…") { (onSwitchNodes ?? onSwitch)() } }
             }
 
         }
@@ -288,7 +291,7 @@ struct NikkiCard: View {
                 }
                 .foregroundStyle(latencyColor)
                 .fixedSize()
-                .help("\(snapshot.client.title) · \(snapshot.latencyKind)")
+                .help("\((sourceTitle ?? snapshot.client.title)) · \(snapshot.latencyKind)")
                 .accessibilityLabel("节点延迟，\(snapshot.latencyKind)")
             }
         }

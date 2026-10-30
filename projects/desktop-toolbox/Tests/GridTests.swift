@@ -20,6 +20,16 @@ import AppKit
  check(tiny.count<6,"insufficient area")
  let snap=CardGrid.snapped(NSRect(x:-12,y:-10,width:344,height:344),area:NSRect(x:0,y:0,width:1000,height:800),anchor:NSPoint(x:20,y:780))
  check(snap.minX>=0 && snap.minY>=0,"snap clamps")
+ let obstacle=NSRect(x:20,y:866,width:344,height:164)
+ let area=NSRect(x:20,y:20,width:2520,height:1370)
+ let reserved=CardGrid.pack(["vpn":large,"api":medium],order:["vpn","api"],area:area,anchor:NSPoint(x:20,y:1030),obstacles:[obstacle])
+ check(reserved.count==2,"unselected Nikki reserves space")
+ for rect in reserved.values {check(!rect.intersects(obstacle),"selected windows cannot cover unselected Nikki");check(area.contains(rect),"obstacle avoidance stays on screen")}
+ for blockers in [[NSRect(x:0,y:0,width:344,height:900)],[NSRect(x:0,y:0,width:1440,height:900)], [NSRect(x:0,y:400,width:344,height:100),NSRect(x:360,y:300,width:344,height:180)]] {
+  let area=NSRect(x:0,y:0,width:1440,height:900)
+  let layout=CardGrid.pack(sizes,order:order,area:area,anchor:NSPoint(x:0,y:900),obstacles:blockers)
+  for (id,rect) in layout {check(area.contains(rect),"blocked layout bounds");for b in blockers {check(!rect.intersects(b),"blocked area clear")};for (other,r) in layout where id != other {check(!rect.intersects(r),"selected pairs remain separated")}}
+ }
  print("GridTests: \(n) checks passed")
  }
 }

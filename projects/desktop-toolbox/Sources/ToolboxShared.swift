@@ -25,7 +25,7 @@ struct GridPreferences:Codable {
 }
 /// Pack the actual card sizes, preserving order. Two 164 pt cards share a 344 pt lane.
 enum CardGrid {
-    static func pack(_ sizes:[String:NSSize],order:[String],area:NSRect,anchor:NSPoint,gap:CGFloat=16)->[String:NSRect] {
+    static func pack(_ sizes:[String:NSSize],order:[String],area:NSRect,anchor:NSPoint,gap:CGFloat=16,obstacles:[NSRect]=[])->[String:NSRect] {
         let ids=order.filter{sizes[$0] != nil};guard !ids.isEmpty else{return [:]}
         let lane=max(344,ids.compactMap{sizes[$0]?.width}.max() ?? 344)
         var x=max(area.minX,min(anchor.x,area.maxX-lane));let firstX=x
@@ -45,7 +45,20 @@ enum CardGrid {
                 x=columns[columnIndex]
                 y=area.maxY;used=0;rowHeight=0
             }
-            let r=NSRect(x:x+used,y:y-size.height,width:size.width,height:size.height)
+            var r=NSRect(x:x+used,y:y-size.height,width:size.width,height:size.height)
+            // Unselected visible windows keep their positions and reserve space.
+            // Each retry moves below a blocker or advances to the next column.
+            while true {
+                let blockers=obstacles.filter { r.insetBy(dx:-gap/2,dy:-gap/2).intersects($0.insetBy(dx:-gap/2,dy:-gap/2)) }
+                if blockers.isEmpty { break }
+                y=min(y,blockers.map(\.minY).min()!-gap);used=0;rowHeight=0
+                if y-size.height<area.minY {
+                    columnIndex+=1
+                    guard columns.indices.contains(columnIndex) else{return result}
+                    x=columns[columnIndex];y=area.maxY
+                }
+                r=NSRect(x:x+used,y:y-size.height,width:size.width,height:size.height)
+            }
             result[id]=r;used+=size.width+gap;rowHeight=max(rowHeight,size.height)
         }
         return result

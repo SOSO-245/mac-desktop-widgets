@@ -22,6 +22,7 @@ def run(*args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', action='store_true')
+    parser.add_argument('--widget-seed', type=Path, help='Pinned public 1.3.3 ZIP for unchanged WidgetKit payload when only CLT is installed')
     args = parser.parse_args()
     stage = Path(tempfile.mkdtemp(prefix='nikki-live-build-'))
     app = stage / (NAME + '.app')
@@ -32,7 +33,7 @@ def main():
     info = dict(CFBundleDevelopmentRegion='zh_CN', CFBundleName=NAME,
                 CFBundleDisplayName=NAME, CFBundleExecutable='NikkiLive',
                 CFBundleIdentifier=BUNDLE, CFBundlePackageType='APPL',
-                CFBundleShortVersionString='1.3.3',
+                CFBundleShortVersionString='1.4.0',
                 CFBundleVersion=datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
                 LSMinimumSystemVersion='14.0', LSUIElement=True,
                 NSHighResolutionCapable=True, NSPrincipalClass='NSApplication',
@@ -54,7 +55,10 @@ def main():
             *sources, *updater_build.compile_flags(ROOT), '-o', binary)
         binaries.append(binary)
     run('lipo', '-create', *binaries, '-output', macos / 'NikkiLive')
-    run('python3', ROOT / 'Widget/build_widget.py', app)
+    if args.widget_seed:
+        run('python3', ROOT / 'Widget/reuse_public_widget.py', app, args.widget_seed.resolve())
+    else:
+        run('python3', ROOT / 'Widget/build_widget.py', app)
     run('xattr', '-cr', app)
     run('codesign', '--force', '--sign', '-', app)
     updater_build.finish(ROOT, app)

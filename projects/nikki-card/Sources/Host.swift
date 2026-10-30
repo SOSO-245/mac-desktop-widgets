@@ -144,13 +144,13 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     onSiteRefresh: { [weak self] in self?.sites.refresh(siteID: $0) },
                     snapshot: monitor.snapshot, alwaysOnTop: alwaysOnTop, positionLocked: positionLocked,
                     onOpen: { [weak self] in self?.openNikki() },
-                    onSwitch: { [weak self] in self?.switchClient() },
+                    onSwitch: { [weak self] in self?.switchSource() },
                     onSettings: { [weak self] in self?.showAppSettings() },
                     onMenuSettings: { [weak self] in self?.showAppSettings() },
                     onRefresh: { [weak self] in self?.refresh() },
                     onToggleTop: { [weak self] in self?.toggleTop() },
                     onToggleLock: { [weak self] in self?.toggleLock() },
-                    onQuit: { NSApp.terminate(nil) }, onTrafficScope: { [weak self] in self?.setTrafficScope($0) },onAppearance:{ AppSettingsController.shared.show("desktop") })
+                    onQuit: { NSApp.terminate(nil) }, sourceTitle: monitor.source.title, onSwitchNodes: { [weak self] in self?.switchClient() }, onTrafficScope: { [weak self] in self?.setTrafficScope($0) },onAppearance:{ AppSettingsController.shared.show("desktop") })
     }
 
     private func desktopCard()->AnyView {
@@ -250,7 +250,8 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             item.target = self; menu.addItem(item)
         }
         add("显示卡片", #selector(showCard))
-        add("打开 Nikki 管理网页", #selector(openNikki))
+        add("打开当前管理网页", #selector(openNikki))
+        add("切换监测来源", #selector(switchSource))
         add("切换节点", #selector(switchClient))
         add("刷新数据", #selector(refresh))
         add("隐藏卡片", #selector(hideCard))
@@ -295,9 +296,16 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusPopover.menu.items.first(where: { $0.action == #selector(showCard) })?.state = cardVisible ? .on : .off
     }
     @objc private func centerCard() { panel.center(); showCard() }
+    @objc private func switchSource() {
+        monitor.selectSource(monitor.source == .nikki ? .metacubexd : .nikki)
+        nodesWindow?.close(); nodesWindow = nil
+        host.rootView = desktopCard(); updateStatus(); updateWidget()
+        if monitor.settings.endpoint.isEmpty { showSettings() }
+    }
     @objc private func openNikki() {
         statusPopover.close()
-        if let endpoint = try? ConnectionSettings.normalized(monitor.settings.endpoint), let url = URL(string:endpoint + "/ui/") { NSWorkspace.shared.open(url) }
+        if let url = try? ConnectionProfiles.dashboardURL(monitor.dashboard) { NSWorkspace.shared.open(url) }
+        else if let endpoint = try? ConnectionSettings.normalized(monitor.settings.endpoint), let url = URL(string:endpoint + "/ui/") { NSWorkspace.shared.open(url) }
     }
     @objc private func showSettings() { AppSettingsController.shared.show("connection") }
     private func customMenuFields()->[MenuField] {
@@ -446,7 +454,10 @@ enum NikkiLiveApplication {
                 let data = FileHandle.standardInput.readDataToEndOfFile()
                 guard let values = try JSONSerialization.jsonObject(with:data) as? [String:String], let endpoint = values["endpoint"], let secret = values["secret"] else { throw APIError.message("输入不完整") }
                 var settings = ConnectionSettings.load(); settings.endpoint = try ConnectionSettings.normalized(endpoint)
-                try Vault.save(secret,endpoint:settings.endpoint); settings.save(); print("已保存连接")
+                try Vault.save(secret,endpoint:settings.endpoint)
+                var profiles = ConnectionProfiles.load()
+                profiles.entries[profiles.selected.rawValue] = settings; profiles.save()
+                settings.save(); print("已保存连接")
             } catch { print("配置保存失败"); exit(1) }
             return
         }

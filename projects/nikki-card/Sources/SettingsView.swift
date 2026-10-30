@@ -3,19 +3,29 @@ import SwiftUI
 struct ConnectionView: View {
     @ObservedObject var monitor: MonitorCoordinator
     @State private var endpoint: String
+    @State private var dashboard: String
     @State private var secret = ""
     @State private var replaceSecret = false
     @State private var message = ""
     init(monitor: MonitorCoordinator) {
         self.monitor = monitor
         _endpoint = State(initialValue: monitor.settings.endpoint)
+        _dashboard = State(initialValue: monitor.dashboard)
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("旁路由连接").font(.headline)
+            Text("监测来源与连接").font(.headline)
+            Picker("数据来源", selection: Binding(get: { monitor.source }, set: { monitor.selectSource($0) })) {
+                ForEach(MonitorSource.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .onChange(of: monitor.source) { _, _ in
+                endpoint = monitor.settings.endpoint; dashboard = monitor.dashboard
+                secret = ""; replaceSecret = false; message = ""
+            }
             Text("直接连接旁路由，为桌面卡片提供数据。").foregroundStyle(.secondary)
             Form {
                 TextField("控制接口",text:$endpoint)
+                TextField("管理网页（可选）",text:$dashboard)
                 SecureField("控制密钥（留空沿用）",text:$secret)
                 Toggle("替换已保存密钥",isOn:$replaceSecret)
             }.textFieldStyle(.roundedBorder)
@@ -25,7 +35,7 @@ struct ConnectionView: View {
                 Button("保存并连接") {
                     do {
                         var new = monitor.settings; new.endpoint = endpoint
-                        try monitor.save(new, secret: (!secret.isEmpty || replaceSecret) ? secret : nil)
+                        try monitor.save(new, secret: (!secret.isEmpty || replaceSecret) ? secret : nil, dashboard: dashboard)
                         secret = ""; replaceSecret = false; message = "已保存"
                     } catch { message = error.localizedDescription }
                 }.buttonStyle(.borderedProminent)

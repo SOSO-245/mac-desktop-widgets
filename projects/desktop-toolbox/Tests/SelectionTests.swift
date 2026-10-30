@@ -34,6 +34,17 @@ import Foundation
         check(invalid.normalized(moduleIDs: draft.order, screenCount: 1) == nil, "unknown draft schema rejected")
         invalid = draft; invalid.transparency = 81
         check(invalid.normalized(moduleIDs: draft.order, screenCount: 1) == nil, "out of range transparency rejected")
+        var edit = draft
+        edit.order += ["api", "nikki"]
+        edit.selectSize("medium", for: "api")
+        check(edit.selected == four.union(["api"]), "size editing includes an unselected API card")
+        check(edit.sizes["api"] == "medium", "requested size retained")
+        edit.selectSize("large", for: "nikki")
+        check(edit.selected.contains("nikki"), "Nikki joins only after explicit edit")
+        check(edit.snap == draft.snap && edit.automatic == draft.automatic, "size editing does not activate live arrangement")
+        let prior = edit
+        edit.selectSize("huge", for: "api"); edit.selectSize("small", for: "unknown")
+        check(edit == prior, "invalid size and unknown targets ignored")
         print("PASS \(checks) selection, readiness and preview preservation checks; no applications or cards changed")
     }
 }

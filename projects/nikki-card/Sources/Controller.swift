@@ -5,8 +5,8 @@ struct ConnectionSettings: Codable, Equatable {
     var endpoint = "http://127.0.0.1:9090"
     var group = "节点选择"
     var provider = ""
-    static func load() -> Self {
-        UserDefaults.standard.data(forKey: "connection").flatMap { try? JSONDecoder().decode(Self.self, from: $0) } ?? Self()
+    static func load(_ defaults: UserDefaults = .standard) -> Self {
+        defaults.data(forKey: "connection").flatMap { try? JSONDecoder().decode(Self.self, from: $0) } ?? Self()
     }
     func save() { UserDefaults.standard.set(try? JSONEncoder().encode(self), forKey: "connection") }
     static func normalized(_ raw: String) throws -> String {
@@ -15,6 +15,37 @@ struct ConnectionSettings: Codable, Equatable {
               c.user == nil, c.password == nil, c.query == nil, c.fragment == nil,
               c.path == "" || c.path == "/", c.port.map({ (1...65535).contains($0) }) ?? true else { throw APIError.message("请填写控制接口地址，不含网页路径或密钥参数") }
         var clean = c; clean.path = ""; return clean.string!
+    }
+}
+
+enum MonitorSource: String, CaseIterable, Codable {
+    case nikki, metacubexd
+    var title: String { self == .nikki ? "Nikki" : "MetaCubeXD" }
+}
+struct ConnectionProfiles: Codable {
+    var selected: MonitorSource = .nikki
+    var entries: [String: ConnectionSettings] = [:]
+    var dashboards: [String: String] = [:]
+    static func load(_ defaults: UserDefaults = .standard) -> Self {
+        if let data = defaults.data(forKey: "connectionProfiles"), let value = try? JSONDecoder().decode(Self.self, from: data) { return value }
+        return Self(entries: [MonitorSource.nikki.rawValue: ConnectionSettings.load(defaults)])
+    }
+    func connection(_ source: MonitorSource) -> ConnectionSettings {
+        if let value = entries[source.rawValue] { return value }
+        var value = ConnectionSettings(); value.endpoint = ""; return value
+    }
+    func save(_ defaults: UserDefaults = .standard) {
+        defaults.set(try? JSONEncoder().encode(self), forKey: "connectionProfiles")
+    }
+    static func dashboardURL(_ raw: String) throws -> URL? {
+        if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
+        guard let c = URLComponents(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+              ["http", "https"].contains(c.scheme ?? ""), c.host != nil,
+              c.user == nil, c.password == nil, c.query == nil,
+              c.fragment == nil || c.fragment == "/",
+              c.port.map({ (1...65535).contains($0) }) ?? true,
+              let url = c.url else { throw APIError.message("请填写不含密钥或账号参数的管理网页地址") }
+        return url
     }
 }
 

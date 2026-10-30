@@ -8,7 +8,20 @@ final class MonitorCoordinator: ObservableObject {
     @Published var providers: [String:[String:Any]] = [:]
     @Published var switching = false
     @Published var actionMessage = ""
-    private(set) var settings = ConnectionSettings.load()
+    @Published private(set) var profiles = ConnectionProfiles.load()
+    private(set) var settings = ConnectionProfiles.load().connection(ConnectionProfiles.load().selected)
+    var source: MonitorSource { profiles.selected }
+    var dashboard: String { profiles.dashboards[source.rawValue] ?? "" }
+    func selectSource(_ target: MonitorSource) {
+        guard target != source else { return }
+        stop()
+        profiles.entries[source.rawValue] = settings
+        profiles.selected = target; profiles.save()
+        settings = profiles.connection(target)
+        switching = false; actionMessage = ""; subscriptionRefreshMessage = ""
+        proxies = [:]; providers = [:]; snapshot = MonitorSnapshot()
+        start()
+    }
     private(set) var api: NikkiAPI?
     var client: ProxyClient { .nikki }
     @Published var subscriptionRefreshing = false
@@ -74,6 +87,9 @@ final class MonitorCoordinator: ObservableObject {
     func start() {
         stop()
         snapshot.trafficScope = trafficScope
+        guard (try? ConnectionSettings.normalized(settings.endpoint)) != nil else {
+            snapshot.connectionState = "请在设置中填写控制接口"; return
+        }
         api = NikkiAPI(settings: settings, secret: Vault.read(settings.endpoint))
         refresh()
         timer = Task { [weak self] in
@@ -94,24 +110,31 @@ final class MonitorCoordinator: ObservableObject {
         timer = nil; polling = nil; stream = nil
         socket?.cancel(with: .goingAway, reason: nil); socket = nil; api?.close(); api = nil; lastTraffic = nil
     }
-    func save(_ new: ConnectionSettings, secret: String?) throws {
+    func save(_ new: ConnectionSettings, secret: String?, dashboard: String? = nil) throws {
         var new = new; new.endpoint = try ConnectionSettings.normalized(new.endpoint)
+        if let dashboard { _ = try ConnectionProfiles.dashboardURL(dashboard) }
         if let secret { try Vault.save(secret, endpoint: new.endpoint) }
+        profiles.entries[source.rawValue] = new
+        if let dashboard { profiles.dashboards[source.rawValue] = dashboard }
+        profiles.save()
         switching = false; actionMessage = ""; settings = new; new.save(); proxies = [:]; providers = [:]; snapshot = MonitorSnapshot(); start()
+    }
+    private func persistSelection() {
+        settings.save(); profiles.entries[source.rawValue] = settings; profiles.save()
     }
     func chooseGroup(_ group: String) {
         guard groups.contains(group) else { return }
-        settings.group = group; settings.save(); applyProxies(); refresh()
+        settings.group = group; persistSelection(); applyProxies(); refresh()
     }
     func chooseProvider(_ name: String) {
-        settings.provider = name; settings.save(); applySubscription()
+        settings.provider = name; persistSelection(); applySubscription()
     }
     private func applyProxies() {
         let group = settings.group
         snapshot.groupName = group
         snapshot.nodeName = NikkiData.leaf(group, proxies: proxies)
         snapshot.latencyMS = snapshot.nodeName.flatMap { NikkiData.recentDelay(proxies[$0]) }
-        snapshot.latencyKind = "Nikki 最近测速"
+        snapshot.latencyKind = source.title + " 最近测速"
         snapshot.routeIdentity = settings.endpoint + "|" + group + "|" + proxies.keys.sorted().compactMap { name in
             (proxies[name]?["now"] as? String).map { name + ":" + $0 }
         }.joined(separator: "|")
@@ -132,7 +155,7 @@ final class MonitorCoordinator: ObservableObject {
                 guard generation == token, !Task.isCancelled else { return }
                 guard let p = data["proxies"] as? [String:[String:Any]] else { throw URLError(.cannotParseResponse) }
                 proxies = p; snapshot.isConnected = true; snapshot.isRunning = true
-                snapshot.connectionState = "已连接旁路由"; snapshot.sampledAt = Date()
+                snapshot.connectionState = "已连接 " + source.title; snapshot.sampledAt = Date()
                 if stream == nil { startTraffic(api, token: token) }
                 do {
                     let data = try await api.json(["providers","proxies"])

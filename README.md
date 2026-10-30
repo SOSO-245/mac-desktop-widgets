@@ -93,3 +93,8 @@ Mac 监测、Nikki、VPN、Codex 重置左键菜单栏显示单张悬浮卡片�
 新增可选的 [桌面工具箱](projects/desktop-toolbox)：六款卡片仍独立运行，统一入口可打开设置、管理显示、混合尺寸排列。左侧先模拟，确认后才执行；支持统一毛玻璃、明暗、背景透明度，以及恢复上次位置。系统 WidgetKit 小组件不参与排列。
 
 本轮：家庭概览 2.4.3、Mac 实时监测 1.3.5、万年历 1.4.9、Codex 重置 1.4.3、VPN 卡片 1.4.3、Nikki 1.3.3、桌面工具箱 1.0.2。Nikki 默认每小时更新当前匹配的订阅，可关闭或调整；Shadowrocket 点击网速会说明当前仅有隧道总速率。
+
+
+## 2026-10-30 工具箱统一更新
+
+[下载桌面工具箱 1.1.0 与 Nikki 1.4.0](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.30-suite1)。工具箱支持取消勾选后应用隐藏、避让保留原位卡片、全套检查与选择更新。[API 1.3.0](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.30-api3) 支持硅基网页登录缓存。其他工具使用原有完整合集下载。

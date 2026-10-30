@@ -45,6 +45,14 @@ struct ToolboxDraft: Codable, Equatable {
     var transparency: Double
     var zoomToCards: Bool
 
+    /// Editing a size is an explicit request to include this card in the draft.
+    /// It does not apply the draft or change any live window.
+    mutating func selectSize(_ value: String, for id: String) {
+        guard order.contains(id), ["small", "medium", "large"].contains(value) else { return }
+        sizes[id] = value
+        selected.insert(id)
+    }
+
     func normalized(moduleIDs: [String], screenCount: Int) -> Self? {
         guard schema == 1, brightness.isFinite, transparency.isFinite,
               (-100...100).contains(brightness), (0...80).contains(transparency),
