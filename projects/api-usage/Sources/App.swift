@@ -16,6 +16,19 @@ final class CardPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
+final class APIHostingView: NSHostingView<Card> {
+    var cardRadius: CGFloat = 28
+    override func layout() {
+        super.layout()
+        wantsLayer = true
+        let mask = CAShapeLayer()
+        mask.frame = bounds
+        mask.path = RoundedRectangle(cornerRadius: cardRadius, style: .continuous).path(in: bounds).cgPath
+        mask.fillColor = NSColor.black.cgColor
+        mask.contentsScale = window?.backingScaleFactor ?? 2
+        layer?.mask = mask
+    }
+}
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let store = Store(preview: CommandLine.arguments.contains("--preview"))
     var status: NSStatusItem!
@@ -62,7 +75,8 @@ final class CardPanel: NSPanel {
         let top = desktop.frame.maxY; let oldX = desktop.frame.minX
         desktop.setContentSize(dimensions(size))
         if top > 0 { desktop.setFrameOrigin(NSPoint(x: oldX, y: top - desktop.frame.height)) }
-        desktop.contentView = NSHostingView(rootView: card(size, desktop: true))
+        let content = APIHostingView(rootView: card(size, desktop: true)); content.cardRadius = 28
+        desktop.contentView = content
         desktop.isMovableByWindowBackground = false
         desktop.dragEnabled = !d.bool(forKey: "locked")
         desktop.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
@@ -86,7 +100,7 @@ final class CardPanel: NSPanel {
         let rect = window.convertToScreen(b.convert(b.bounds, to: nil))
         let bounds = (window.screen ?? NSScreen.main)!.visibleFrame
         floating.setContentSize(NSSize(width: 344, height: 344))
-        floating.contentView = NSHostingView(rootView: card("large", desktop: false))
+        floating.contentView = APIHostingView(rootView: card("large", desktop: false))
         floating.setFrameOrigin(NSPoint(x: max(bounds.minX + 8, min(bounds.maxX - 352, rect.midX - 172)), y: rect.minY - 352))
         floating.orderFrontRegardless()
         outside = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in Task { @MainActor in self?.closePopover() } }

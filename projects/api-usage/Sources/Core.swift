@@ -21,6 +21,8 @@ struct CostPoint: Codable, Equatable, Identifiable {
 }
 struct CostReport { var totals: [String: Decimal]; var points: [CostPoint] }
 struct Snapshot: Codable {
+    var siliconBalance: Record<SiliconAmount>?
+    var siliconMonthly: Record<SiliconAmount>?
     var costHistory: Record<[CostPoint]>?
     var hourly: Record<[UsagePoint]>?
     var weekly: Record<[UsagePoint]>?

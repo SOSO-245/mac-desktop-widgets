@@ -58,6 +58,8 @@ struct Vault {
             let samples: [Int64] = [0,0,2,0,3,0,1,0,2,0,3,0,1,0,3,12,36,210,71,19,8,3,0,2]
             snapshot.hourly = Record(value: samples.enumerated().map { UsagePoint(date: Date().addingTimeInterval(Double($0.offset - 23)*3600), tokens: $0.element*1000, requests: $0.element) }, date: Date(), period: nil)
             snapshot.weekly = Record(value: [40,75,62,120,85,240,95].enumerated().map { UsagePoint(date: Date().addingTimeInterval(Double($0.offset - 6)*86400), tokens: Int64($0.element)*10000, requests: Int64($0.element)) }, date: Date(), period: nil)
+            snapshot.siliconBalance = Record(value: SiliconAmount(amount: 95.20,currency: "CNY"),date: Date(),period: nil)
+            snapshot.siliconMonthly = Record(value: SiliconAmount(amount: 4.25,currency: "CNY"),date: Date(),period: "2026-10")
             hasOpenAI = true; hasDeepSeek = true
             return
         }
@@ -72,6 +74,17 @@ struct Vault {
             catch { errors[p] = error.localizedDescription }
         }
         hasOpenAI = keys["openai"] != nil; hasDeepSeek = keys["deepseek"] != nil
+        SiliconWebLogin.shared.onReading = { [weak self] reading in
+            guard let self else { return }
+            let record = Record(value: reading.value, date: Date(), period: reading.period)
+            if reading.kind == "balance" { self.snapshot.siliconBalance = record }
+            else { self.snapshot.siliconMonthly = record }
+            self.persist(); self.onChange?()
+        }
+        SiliconWebLogin.shared.onForget = { [weak self] in
+            self?.snapshot.siliconBalance = nil; self?.snapshot.siliconMonthly = nil
+            self?.persist(); self?.onChange?()
+        }
         schedule(); Task { await refresh() }
     }
     func schedule() {

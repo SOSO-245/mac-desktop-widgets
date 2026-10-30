@@ -5,8 +5,9 @@ import ServiceManagement
 let mint = Color(red: 0.35, green: 1, blue: 0.77)
 let muted = Color(red: 0.66, green: 0.75, blue: 0.85)
 struct Glass: NSViewRepresentable {
+    var radius: CGFloat = 28
     func makeNSView(context: Context) -> NSVisualEffectView {
-        let v = NSVisualEffectView(); v.material = .hudWindow; v.blendingMode = .behindWindow; v.state = .active; return v
+        let v = NSVisualEffectView(); v.material = .hudWindow; v.blendingMode = .behindWindow; v.state = .active; v.appearance = NSAppearance(named: .darkAqua); return v
     }
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
@@ -24,6 +25,7 @@ struct Card: View {
     @AppStorage("brightness") var brightness = -45.0
     @AppStorage("transparency") var transparency = 20.0
     func openProvider(_ p: String) {
+        if p == "siliconflow" { SiliconWebLogin.shared.show(); return }
         let url = p == "openai" ? "https://platform.openai.com/usage" : p == "deepseek" ? "https://platform.deepseek.com/usage" : "https://cloud.siliconflow.cn/"
         NSWorkspace.shared.open(URL(string: url)!)
     }
@@ -45,68 +47,80 @@ struct Card: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
             ZStack {
-                if !store.preview && glass { Glass() }
+                if !store.preview && glass { Glass(radius: 28) }
                 else { Color(red: 0.04, green: 0.10, blue: 0.18).opacity(1-transparency/100) }
                 LinearGradient(colors: [Color(red: 0.04, green: 0.14, blue: 0.24).opacity(darkness * (1-transparency/100)), Color(red: 0.13, green: 0.09, blue: 0.25).opacity(darkness * (1-transparency/100))], startPoint: .topLeading, endPoint: .bottomTrailing)
                 (brightness > 0 ? Color.white : Color.black).opacity(abs(brightness)/100 * 0.25)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: size == "small" ? 23 : 28))
-        .overlay(RoundedRectangle(cornerRadius: size == "small" ? 23 : 28).strokeBorder(.white.opacity(0.24), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white.opacity(0.24), lineWidth: 0.65))
     }
     var large: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 5) {
-                HStack { Text("OpenAI").bold(); Spacer(); Text("本月消耗 ↗").foregroundStyle(muted).font(.system(size: 10)) }
-                HStack(alignment: .firstTextBaseline) {
-                    Text(store.costText).font(.system(size: 28, weight: .medium, design: .rounded)).foregroundStyle(mint).minimumScaleFactor(0.5).lineLimit(1)
-                    Spacer()
-                    Text(store.snapshot.usage.map { compact($0.value.total) + " Token" } ?? "Token —").font(.system(size: 10)).foregroundStyle(muted)
-                }
-            }.contentShape(Rectangle()).onTapGesture { openProvider("openai") }.help("点击查看 OpenAI 官方 API 用量及费用")
-            UsageBars(store: store, height: 25)
-            stateLine(provider: "openai")
-            Rectangle().fill(.white.opacity(0.15)).frame(height: 1)
-            VStack(alignment: .leading, spacing: 6) {
-                HStack { Text("DeepSeek").bold(); Spacer(); Text("API 账户 ↗").font(.system(size: 10)).foregroundStyle(muted) }
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("余额").font(.system(size: 9)).foregroundStyle(muted)
-                        Text(store.balanceText).font(.system(size: 22, weight: .medium, design: .rounded)).foregroundStyle(.cyan).minimumScaleFactor(0.4).lineLimit(1).fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("本月消耗").font(.system(size: 9)).foregroundStyle(muted)
-                        Text("官网查询 ↗").font(.system(size: 12)).foregroundStyle(muted)
-                    }
-                }
-            }.contentShape(Rectangle()).onTapGesture { openProvider("deepseek") }.help("历史费用接口未接入，点击查询官方账单")
-            stateLine(provider: "deepseek")
-            Rectangle().fill(.white.opacity(0.15)).frame(height: 1)
-            HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("硅基流动").font(.system(size: 12, weight: .bold))
-                    Text("余额 / 本月消耗 · 官网查询").font(.system(size: 9)).foregroundStyle(muted)
-                }
-                Spacer(); Image(systemName: "arrow.up.right").foregroundStyle(.cyan)
-            }.contentShape(Rectangle()).onTapGesture { openProvider("siliconflow") }.help("国内余额接口暂不可用，打开官方控制台")
-            Spacer(minLength: 0)
-            HStack { Circle().fill(store.preview ? .orange : mint).frame(width: 4, height: 4); Text(store.preview ? "示例数据" : "API · UTC 月份"); Spacer(); Button("设置连接", action: settings).buttonStyle(.plain).foregroundStyle(.cyan) }.font(.system(size: 9)).foregroundStyle(muted)
-        }.font(.system(size: 13))
+                    HStack { Text("OpenAI").font(.system(size: 13, weight: .semibold)); Spacer(); Text("本月消耗 ↗").font(.system(size: 9)).foregroundStyle(muted) }
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(store.costText).font(.system(size: 27, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(mint).minimumScaleFactor(0.6).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(store.snapshot.usage.map { compact($0.value.total) + " Token" } ?? "Token —").font(.system(size: 10)).foregroundStyle(muted)
+                    }
+                }.contentShape(Rectangle()).onTapGesture { openProvider("openai") }
+                UsageBars(store: store, height: 30)
+                stateLine(provider: "openai")
+            }
+            Rectangle().fill(.white.opacity(0.13)).frame(height: 0.5)
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("DeepSeek").font(.system(size: 13, weight: .semibold))
+                    Text("余额").font(.system(size: 9)).foregroundStyle(muted)
+                    Text(store.balanceText).font(.system(size: 24, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(.cyan).lineLimit(1).minimumScaleFactor(0.6)
+                    stateLine(provider: "deepseek")
+                    Spacer(minLength: 5)
+                    Text("本月消耗").font(.system(size: 9)).foregroundStyle(muted)
+                    Text("官网查询 ↗").font(.system(size: 12)).foregroundStyle(muted)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .contentShape(Rectangle()).onTapGesture { openProvider("deepseek") }.help("打开 DeepSeek 官网账单")
+                Rectangle().fill(.white.opacity(0.13)).frame(width: 0.5)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack { Text("硅基流动").font(.system(size: 13, weight: .semibold)); Spacer(minLength: 0); Image(systemName: "arrow.up.right").font(.system(size: 9)).foregroundStyle(.cyan) }
+                    Text("余额").font(.system(size: 9)).foregroundStyle(muted)
+                    Text(store.snapshot.siliconBalance.map { money($0.value.amount,$0.value.currency) } ?? "—").font(.system(size: 24, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(.cyan).lineLimit(1).minimumScaleFactor(0.6)
+                    HStack(spacing: 4) {
+                        Circle().fill(store.snapshot.siliconBalance == nil ? Color.gray : .orange).frame(width: 4,height: 4)
+                        Text(store.snapshot.siliconBalance.map { "网页缓存 " + $0.date.formatted(date: .omitted,time: .shortened) } ?? "登录后缓存")
+                    }.font(.system(size: 8)).foregroundStyle(muted)
+                    Spacer(minLength: 5)
+                    Text(store.snapshot.siliconMonthly.map { ($0.period ?? "所选月份") + " 账单" } ?? "月度账单").font(.system(size: 9)).foregroundStyle(muted)
+                    Text(store.snapshot.siliconMonthly.map { money($0.value.amount,$0.value.currency) } ?? "登录后缓存").font(.system(size: 13,weight: .medium)).foregroundStyle(muted).lineLimit(1)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .contentShape(Rectangle()).onTapGesture { openProvider("siliconflow") }.help("打开硅基流动登录与账单缓存窗口")
+            }.frame(maxHeight: .infinity)
+            HStack { Circle().fill(store.preview ? .orange : mint).frame(width: 4, height: 4); Text(store.preview ? "示例数据" : "OpenAI · UTC 月份"); Spacer(); Button("设置连接", action: settings).buttonStyle(.plain).foregroundStyle(.cyan) }.font(.system(size: 9)).foregroundStyle(muted)
+        }.frame(maxHeight: .infinity, alignment: .topLeading)
     }
     var medium: some View {
-        HStack(alignment: .top, spacing: 18) {
+        HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("OpenAI · 本月消耗 ↗").foregroundStyle(muted).font(.system(size: 10))
-                Text(store.costText).font(.system(size: 25, weight: .medium)).foregroundStyle(mint).minimumScaleFactor(0.5).lineLimit(1).onTapGesture { openProvider("openai") }
+                Text(store.costText).font(.system(size: 25, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(mint).minimumScaleFactor(0.5).lineLimit(1).onTapGesture { openProvider("openai") }
                 UsageBars(store: store, height: 19)
             }.frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .trailing, spacing: 5) {
-                Text("DeepSeek · 余额 ↗").foregroundStyle(muted).font(.system(size: 10))
-                Text(store.balanceText).font(.system(size: 23, weight: .medium)).foregroundStyle(.cyan).minimumScaleFactor(0.4).lineLimit(1)
-                Text("本月消耗 · 官网查询").font(.system(size: 9)).foregroundStyle(muted)
-                Text(store.preview ? "示例数据" : "硅基流动：设置中查询").font(.system(size: 8)).foregroundStyle(muted)
-            }.frame(maxWidth: .infinity, alignment: .trailing).contentShape(Rectangle()).onTapGesture { openProvider("deepseek") }
+            VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("DeepSeek · 余额 ↗").foregroundStyle(muted).font(.system(size: 9))
+                    Text(store.balanceText).font(.system(size: 20, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(.cyan).minimumScaleFactor(0.5).lineLimit(1).fixedSize(horizontal: false, vertical: true).frame(height: 24)
+                }.frame(maxWidth: .infinity, alignment: .trailing).contentShape(Rectangle()).onTapGesture { openProvider("deepseek") }.help("点击查看 DeepSeek 官方账单")
+                Rectangle().fill(.white.opacity(0.13)).frame(height: 0.5)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("硅基流动 · 网页缓存 ↗").foregroundStyle(muted).font(.system(size: 9))
+                    Text(store.snapshot.siliconBalance.map { money($0.value.amount,$0.value.currency) } ?? "登录后缓存").font(.system(size: 20, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(.cyan).minimumScaleFactor(0.5).lineLimit(1).fixedSize(horizontal: false, vertical: true).frame(height: 24)
+                    if let month = store.snapshot.siliconMonthly {
+                        Text((month.period ?? "账单") + " · " + money(month.value.amount,month.value.currency)).font(.system(size: 8)).foregroundStyle(muted).lineLimit(1)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .trailing).contentShape(Rectangle()).onTapGesture { openProvider("siliconflow") }.help("打开登录与账单缓存窗口；余额与账单为上次手动读取值")
+            }.frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
     var small: some View {
@@ -195,8 +209,10 @@ struct SettingsPanel: View {
                 }
                 GroupBox("硅基流动 · 国内站") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("旧余额接口已下线，当前不采集密钥或自动查询。余额与用量请查看官方控制台；后续有可用接口再接入。").foregroundStyle(.secondary)
-                        HStack { Link("打开控制台 ↗", destination: URL(string: "https://cloud.siliconflow.cn/")!); Link("接口公告 ↗", destination: URL(string: "https://docs.siliconflow.cn/docs/release-notes/overview")!) }
+                        Text("登录状态保存在本机钥匙串。进入官网余额页，或费用明细选择按月，点击“缓存当前账单”；卡片保留最后一次成功读取值与时间。").foregroundStyle(.secondary)
+                        if let r = store.snapshot.siliconBalance { Text("网页余额：" + money(r.value.amount,r.value.currency) + " · 缓存 " + r.date.formatted()).font(.callout) }
+                        if let r = store.snapshot.siliconMonthly { Text((r.period ?? "账单") + "账单金额：" + money(r.value.amount,r.value.currency) + " · 缓存 " + r.date.formatted()).font(.callout) }
+                        HStack { Button("登录与账单缓存…") { SiliconWebLogin.shared.show() }; Link("打开控制台 ↗", destination: URL(string: "https://cloud.siliconflow.cn/")!); Link("接口公告 ↗", destination: URL(string: "https://docs.siliconflow.cn/docs/release-notes/overview")!) }
                     }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 GroupBox("显示与刷新") {
