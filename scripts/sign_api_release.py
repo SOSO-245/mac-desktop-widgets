@@ -83,7 +83,7 @@ def main():
     ET.SubElement(item, 'title').text = info['CFBundleShortVersionString']
     for name, value in [('version', info['CFBundleVersion']), ('shortVersionString', info['CFBundleShortVersionString']), ('minimumSystemVersion', '14.0')]:
         ET.SubElement(item, '{' + SPARKLE + '}' + name).text = value
-    ET.SubElement(item, 'description').text = '新增独立软件更新：每天检查、手动检查与可选自动下载。修复本月费用遗漏 UTC 当天的问题。保留原连接、卡片外观和数据刷新设置。应用仍未经过 Apple 公证。'
+    ET.SubElement(item, 'description').text = '新增硅基流动独立网页登录与手动账单缓存，安全登录会话仅存本机钥匙串。大号上下分区、中号左图表右余额，统一余额字体与连续圆角边框。保留原 API 连接与软件更新。应用仍未经过 Apple 公证。'
     ET.SubElement(item, 'enclosure', {'url': f'{REPO}/releases/download/{args.tag}/{archive.name}', 'length': str(archive.stat().st_size), 'type': 'application/octet-stream', '{' + SPARKLE + '}edSignature': signature})
     output = ROOT / 'updates'; output.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.signed-api-', dir=output) as temp:
