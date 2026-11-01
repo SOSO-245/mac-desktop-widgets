@@ -160,6 +160,22 @@ struct ProxySelection {
         return ProxySelection(nodeName: nil, groupName: root, latencyMS: nil)
     }
 
+    /// Supplement only unique provider leaves; never replace a running core entry.
+    static func catalog(proxies:[String:Any],providers:[String:[String:Any]]) -> (entries:[String:Any],providersByNode:[String:String]) {
+        var entries=proxies;var candidates:[String:[(String,[String:Any])]]=[:]
+        for (provider,data) in providers {
+            for node in data["proxies"] as? [[String:Any]] ?? [] {
+                guard let name=node["name"] as? String,!name.isEmpty,proxies[name]==nil else{continue}
+                candidates[name,default:[]].append((provider,node))
+            }
+        }
+        var source:[String:String]=[:]
+        for (name,matches) in candidates where matches.count==1 {
+            entries[name]=matches[0].1;source[name]=matches[0].0
+        }
+        return (entries,source)
+    }
+
     private static func isGroup(_ value: [String: Any]) -> Bool {
         let type = (value["type"] as? String ?? "").lowercased()
         return ["selector", "urltest", "fallback", "loadbalance", "relay"].contains(type)
@@ -199,7 +215,7 @@ struct ClashLatencyProbe {
         return fallbackURL
     }
 
-    static func request(nodeName: String, testURL: String) throws -> URLRequest {
+    static func request(nodeName: String, testURL: String, provider:String?=nil) throws -> URLRequest {
         // Encode the entire name as exactly one path segment, including slashes,
         // percent signs, dots, Unicode, and query/fragment delimiters.
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_~")
@@ -210,7 +226,10 @@ struct ClashLatencyProbe {
         components.scheme = "http"
         components.host = "127.0.0.1"
         components.port = 9090
-        components.percentEncodedPath = "/proxies/\(encoded)/delay"
+        if let provider {
+            guard !provider.isEmpty,let encodedProvider=provider.addingPercentEncoding(withAllowedCharacters:allowed) else{throw URLError(.badURL)}
+            components.percentEncodedPath="/providers/proxies/\(encodedProvider)/\(encoded)/healthcheck"
+        } else {components.percentEncodedPath="/proxies/\(encoded)/delay"}
         components.queryItems = [URLQueryItem(name: "timeout", value: "5000"),
                                  URLQueryItem(name: "url", value: testURL)]
         guard let url = components.url else { throw URLError(.badURL) }
@@ -246,6 +265,8 @@ final class FlClashMonitor: ObservableObject {
     private var trafficScope = TrafficScope.load()
     private var proxySampler = DualTrafficSampler()
     private var proxyTypes: [String: String] = [:]
+    private var providersByNode:[String:String]=[:]
+    private var latencyProvider:String?
 
     func setTrafficScope(_ value: TrafficScope) {
         guard value != trafficScope else { return }
@@ -347,7 +368,9 @@ final class FlClashMonitor: ObservableObject {
             }
             do {
                 let config = try await self.readEndpoint("configs")
-                let response = try await self.readEndpoint("proxies")
+                let catalog = try await self.readProxyCatalog()
+                self.providersByNode=catalog.providersByNode
+                let response:[String:Any]=["proxies":catalog.entries]
                 guard !Task.isCancelled, self.generation == currentGeneration,
                       self.activeSubscription?.id == profileID else { return }
                 self.proxyTypes = (response["proxies"] as? [String: [String: Any]] ?? [:]).compactMapValues { $0["type"] as? String }
@@ -447,6 +470,12 @@ final class FlClashMonitor: ObservableObject {
         return json
     }
 
+    private func readProxyCatalog() async throws -> (entries:[String:Any],providersByNode:[String:String]) {
+        let response=try await readEndpoint("proxies")
+        let extra=try? await readEndpoint("providers/proxies")
+        return ProxySelection.catalog(proxies:response["proxies"] as? [String:Any] ?? [:],providers:extra?["providers"] as? [String:[String:Any]] ?? [:])
+    }
+
     private func updateAutomaticLatency(selection: ProxySelection?, configuration: [String: Any]) {
         guard running, controllerEnabled, snapshot.isRunning,
               let nodeName = selection?.nodeName, !nodeName.isEmpty,
@@ -455,10 +484,12 @@ final class FlClashMonitor: ObservableObject {
             return
         }
         let testURL = ClashLatencyProbe.testURL(configuration: configuration)
-        if latencyNodeName != nodeName || latencyTestURL != testURL {
+        let provider=providersByNode[nodeName]
+        if latencyNodeName != nodeName || latencyTestURL != testURL || latencyProvider != provider {
             cancelAutomaticLatency()
             latencyNodeName = nodeName
             latencyTestURL = testURL
+            latencyProvider = provider
         }
         guard latencyTask == nil else { return }
         let now = ContinuousClock.now
@@ -481,7 +512,7 @@ final class FlClashMonitor: ObservableObject {
             }
             do {
                 let request = try FlClashAuthorization.apply(
-                    to: ClashLatencyProbe.request(nodeName: nodeName, testURL: testURL), secret: self.controllerSecret)
+                    to: ClashLatencyProbe.request(nodeName: nodeName, testURL: testURL,provider:provider), secret: self.controllerSecret)
                 let (data, response) = try await self.session.data(for: request)
                 let delay = try ClashLatencyProbe.decode(data: data, response: response)
                 guard !Task.isCancelled, self.generation == currentGeneration,
@@ -491,7 +522,9 @@ final class FlClashMonitor: ObservableObject {
                 // Re-read the running selection before publishing. A node or
                 // profile may have changed while this request was in flight.
                 let latestConfig = try await self.readEndpoint("configs")
-                let latestProxies = try await self.readEndpoint("proxies")
+                let latestCatalog = try await self.readProxyCatalog()
+                self.providersByNode=latestCatalog.providersByNode
+                let latestProxies:[String:Any]=["proxies":latestCatalog.entries]
                 self.readPreferences()
                 guard !Task.isCancelled, self.running, self.controllerEnabled, self.snapshot.isRunning,
                       self.generation == currentGeneration,
@@ -503,7 +536,7 @@ final class FlClashMonitor: ObservableObject {
                     currentGroup: self.activeSubscription?.currentGroup,
                     selected: self.activeSubscription?.selected ?? [:]
                 )
-                guard confirmed?.nodeName == nodeName,
+                guard confirmed?.nodeName == nodeName,self.providersByNode[nodeName]==provider,
                       ClashLatencyProbe.testURL(configuration: latestConfig) == testURL else {
                     self.snapshot.nodeName = confirmed?.nodeName
                     self.snapshot.groupName = confirmed?.groupName
@@ -530,6 +563,7 @@ final class FlClashMonitor: ObservableObject {
         latencyRequestID = nil
         latencyNodeName = nil
         latencyTestURL = nil
+        latencyProvider = nil
         lastLatencyAttemptAt = nil
         snapshot.latencyMS = nil
         snapshot.latencyIsLive = false

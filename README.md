@@ -103,3 +103,6 @@ Mac 监测、Nikki、VPN、Codex 重置左键菜单栏显示单张悬浮卡片�
 ## 2026-11-01
 
 [下载 API 1.4.0、Nikki 1.4.1 与 VPN 1.4.4](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.11.01-r1)。API 新增自定义统计周期/手动额度，本版须手动安装，原更新签名公钥与旧清单保持不变；Nikki/VPN 新增同刻双范围曲线，支持原自动更新。
+
+
+[VPN 1.4.5 节点与延迟修复](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.11.01-r2) 为单软件增量修复，包含此前双范围曲线；API与Nikki继续使用r1下载。
