@@ -33,6 +33,8 @@ def run(slug):
         for name,sources in additional:
             executable=str(Path(tmp)/name)
             commands += [['xcrun','swiftc','-swift-version','5','-parse-as-library',*sources,'-o',executable],[executable]]
+        if slug=='vpn-card':
+            commands += [['xcrun','swiftc','-parse-as-library','Sources/Model.swift','Sources/Backend.swift','Tests/ProviderNodeTests.swift','-o',str(Path(tmp)/'provider-tests')],[str(Path(tmp)/'provider-tests')]]
         if slug=='nikki-card':
             commands += [['xcrun','swiftc','-parse-as-library','Sources/SubscriptionRefresh.swift','Tests/SubscriptionRefreshTests.swift','-o',str(Path(tmp)/'subscription-tests')],[str(Path(tmp)/'subscription-tests')]]
             commands += [['xcrun','swiftc','-parse-as-library','Sources/Model.swift','Sources/WidgetData.swift','Tests/WidgetTests.swift','-o',str(Path(tmp)/'widget-tests')],[str(Path(tmp)/'widget-tests')]]

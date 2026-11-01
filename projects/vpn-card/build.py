@@ -32,7 +32,7 @@ def main():
     info = dict(CFBundleDevelopmentRegion='zh_CN', CFBundleName=NAME,
                 CFBundleDisplayName=NAME, CFBundleExecutable='FlClashLive',
                 CFBundleIdentifier=BUNDLE, CFBundlePackageType='APPL',
-                CFBundleShortVersionString='1.4.5',
+                CFBundleShortVersionString='1.4.6',
                 CFBundleVersion=datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
                 LSMinimumSystemVersion='14.0', LSUIElement=True,
                 NSHighResolutionCapable=True, NSPrincipalClass='NSApplication')

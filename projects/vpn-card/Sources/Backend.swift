@@ -12,6 +12,20 @@ final class LoopbackSessionDelegate: NSObject, URLSessionTaskDelegate, @unchecke
     }
 }
 
+/// Shared by the production reader and regression tests; collection reads only.
+enum ClashControllerRead {
+    static func request(path: String, secret: String) throws -> URLRequest {
+        guard ["configs", "proxies", "connections", "providers/proxies"].contains(path),
+              let url = URL(string: "http://127.0.0.1:9090/\(path)") else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 4
+        return try FlClashAuthorization.apply(to: request, secret: secret)
+    }
+}
+
 /// `/traffic` reports bytes per second for traffic handled by the Clash core.
 /// It is not a subscription billing counter, and may include DIRECT traffic.
 struct TrafficSample {
@@ -452,13 +466,7 @@ final class FlClashMonitor: ObservableObject {
     }
 
     private func readEndpoint(_ path: String) async throws -> [String: Any] {
-        // All callers use these two read-only paths on a fixed loopback origin.
-        guard ["configs", "proxies", "connections"].contains(path),
-              let url = URL(string: "http://127.0.0.1:9090/\(path)") else { throw URLError(.badURL) }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 4
-        request = try FlClashAuthorization.apply(to: request, secret: controllerSecret)
+        let request = try ClashControllerRead.request(path: path, secret: controllerSecret)
         let (data, response) = try await session.data(for: request)
         if (response as? HTTPURLResponse)?.statusCode == 401 { throw URLError(.userAuthenticationRequired) }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200,

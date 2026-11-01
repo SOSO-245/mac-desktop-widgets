@@ -3,6 +3,14 @@ import Foundation
  static func main() throws {
   var n=0
   func check(_ b:Bool,_ s:String){n+=1;precondition(b,s)}
+  for path in ["configs","proxies","connections","providers/proxies"] {
+   let request=try ClashControllerRead.request(path:path,secret:"")
+   check(request.url?.absoluteString=="http://127.0.0.1:9090/\(path)" && request.httpMethod=="GET","production reader allows fixed collection: \(path)")
+  }
+  for path in ["../configs","providers/proxies/secret","https://example.com","proxies?url=x","restart"] {
+   do { _=try ClashControllerRead.request(path:path,secret:"");preconditionFailure("unexpected allowed path") }
+   catch { check((error as? URLError)?.code == .badURL,"unlisted read path rejected") }
+  }
   let root:[String:Any] = ["root":["type":"Fallback","now":"provider-only","all":["provider-only"]]]
   let data:[String:[String:Any]]=["subscription":["proxies":[["name":"provider-only","type":"Vless","history":[["delay":87]]]]]]
   let c=ProxySelection.catalog(proxies:root,providers:data)
