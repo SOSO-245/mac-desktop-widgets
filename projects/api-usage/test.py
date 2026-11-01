@@ -18,3 +18,8 @@ with tempfile.TemporaryDirectory(prefix='silicon-cache-tests-') as d:
     exe=Path(d)/'tests'
     subprocess.run(['xcrun','swiftc','-parse-as-library',str(r/'Sources/Core.swift'),str(r/'Sources/SiliconReading.swift'),str(r/'Tests/SiliconTests.swift'),'-o',str(exe)],check=True)
     subprocess.run([str(exe)],check=True)
+
+with tempfile.TemporaryDirectory(prefix='api-billing-period-tests-') as d:
+    exe=Path(d)/'tests'
+    subprocess.run(['xcrun','swiftc','-parse-as-library',str(r/'Sources/Core.swift'),str(r/'Sources/SiliconReading.swift'),str(r/'Tests/BillingPeriodTests.swift'),'-o',str(exe)],check=True)
+    subprocess.run([str(exe)],check=True)

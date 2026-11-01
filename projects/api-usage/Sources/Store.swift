@@ -46,14 +46,17 @@ struct Vault {
     private var timer: Timer?
     private let client = APIClient()
     private let cache: URL
+    @Published var creditSchedule=CreditSchedule()
     let preview: Bool
     init(preview: Bool = false) {
         self.preview = preview
         cache = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("APIUsageCard/cache.json")
+        if let data=defaults.data(forKey:"openaiCreditSchedule"),let saved=try? JSONDecoder().decode(CreditSchedule.self,from:data),saved.valid {creditSchedule=saved}
         if preview {
-            snapshot.costs = Record(value: ["USD": Decimal(string: "12.48")!], date: Date(), period: Month().id)
-            snapshot.costHistory = Record(value: [0.2,0.38,0.3,0.66,0.48,0.92,0.7,1.18,0.91,1.45,1.12,1.8].enumerated().map { CostPoint(day: Month().start.addingTimeInterval(Double($0.offset)*86400), currency: "USD", amount: Decimal($0.element)) }, date: Date(), period: Month().id)
-            snapshot.usage = Record(value: Usage(input: 1_820_000, output: 348_000, requests: 1264), date: Date(), period: Month().id)
+            creditSchedule=CreditSchedule();creditSchedule.startDay=7;creditSchedule.regularUSD="100"
+            snapshot.costs = Record(value: ["USD": Decimal(string: "12.48")!], date: Date(), period: creditSchedule.period().id)
+            snapshot.costHistory = Record(value: [0.2,0.38,0.3,0.66,0.48,0.92,0.7,1.18,0.91,1.45,1.12,1.8].enumerated().map { CostPoint(day: creditSchedule.period().start.addingTimeInterval(Double($0.offset)*86400), currency: "USD", amount: Decimal($0.element)) }, date: Date(), period: creditSchedule.period().id)
+            snapshot.usage = Record(value: Usage(input: 1_820_000, output: 348_000, requests: 1264), date: Date(), period: creditSchedule.period().id)
             snapshot.balances = Record(value: [Balance(currency: "CNY", total: 86.42, granted: 6.42, topped: 80)], date: Date(), period: nil)
             let samples: [Int64] = [0,0,2,0,3,0,1,0,2,0,3,0,1,0,3,12,36,210,71,19,8,3,0,2]
             snapshot.hourly = Record(value: samples.enumerated().map { UsagePoint(date: Date().addingTimeInterval(Double($0.offset - 23)*3600), tokens: $0.element*1000, requests: $0.element) }, date: Date(), period: nil)
@@ -95,7 +98,7 @@ struct Vault {
         }
     }
     func expireMonth() {
-        let id = Month().id
+        let id = creditSchedule.period().id
         if snapshot.costs?.period != id { snapshot.costs = nil }
         if snapshot.costHistory?.period != id { snapshot.costHistory = nil }
         if snapshot.usage?.period != id { snapshot.usage = nil }
@@ -129,7 +132,7 @@ struct Vault {
     func refresh() async {
         guard !refreshing, !preview else { return }
         refreshing = true; defer { refreshing = false; onChange?() }
-        expireMonth(); let month = Month(); let revision = generation
+        expireMonth(); let month = creditSchedule.period(); let revision = generation
         if let key = keys["openai"] {
             let project = defaults.string(forKey: "project") ?? ""
             do {
@@ -173,6 +176,25 @@ struct Vault {
             try JSONEncoder().encode(snapshot).write(to: cache, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cache.path)
         } catch { message = "缓存保存失败，本次读取仍可显示" }
+    }
+    func saveCreditSchedule(_ value:CreditSchedule) {
+        guard !refreshing else {message="请等待本次刷新结束";return}
+        guard value.valid,Month.calendar.startOfDay(for:value.firstStart)<=Date() || !value.firstEnabled else {message="请检查日期和美元额度";return}
+        guard let data=try? JSONEncoder().encode(value) else{return}
+        defaults.set(data,forKey:"openaiCreditSchedule");generation+=1;creditSchedule=value
+        expireMonth();persist();onChange?();message="统计周期已保存，正在重新读取"
+        Task {await refresh()}
+    }
+    var periodLabel:String {creditSchedule.startDay==1 && !creditSchedule.firstEnabled ? "本月消耗":"本期消耗"}
+    var periodRange:String {
+        let p=creditSchedule.period();let f=DateFormatter();f.timeZone=TimeZone(secondsFromGMT:0);f.dateFormat="yyyy-MM-dd"
+        return f.string(from:p.start)+" → "+f.string(from:p.nextStart)+" · UTC"
+    }
+    var allowanceText:String? {creditSchedule.allowance().map{money($0,"USD")}}
+    var estimateText:String? {
+        guard (defaults.string(forKey:"project") ?? "").isEmpty,snapshot.costs?.period==creditSchedule.period().id,
+              let spent=snapshot.costs?.value["USD"] else{return nil}
+        return creditSchedule.estimatedRemaining(spent:spent).map{money($0,"USD")}
     }
     var costText: String { snapshot.costs.map { $0.value.sorted(by: { $0.key < $1.key }).map { money($0.value, $0.key) }.joined(separator: " / ") } ?? "—" }
     var balanceText: String { snapshot.balances.map { $0.value.map { money($0.total, $0.currency) }.joined(separator: " / ") } ?? "—" }

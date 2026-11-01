@@ -62,6 +62,7 @@ struct MonitorSnapshot {
     var isConnected = false
     var isRunning = false
     var sampledAt: Date?
+    var trafficComparison: [TrafficPairPoint]? = nil
     var speedHistory: [Double] = []
     var uploadSpeedHistory: [Double] = []
 }
@@ -213,5 +214,29 @@ enum FlClashAuthorization {
 enum ConnectionMetrics {
     static func count(_ payload:[String:Any]?) -> Int? {
         (payload?["connections"] as? [[String:Any]])?.count
+    }
+}
+
+/// Both modes are sampled at the same instant; nil is unknown, never zero.
+struct TrafficPairPoint: Codable {
+    let allDown: Double?
+    let allUp: Double?
+    let proxyDown: Double?
+    let proxyUp: Double?
+    func value(proxy: Bool, upload: Bool) -> Double? {
+        proxy ? (upload ? proxyUp : proxyDown) : (upload ? allUp : allDown)
+    }
+}
+extension MonitorSnapshot {
+    mutating func selectTrafficComparison() {
+        guard let p=trafficComparison?.last else {uploadBps=nil;downloadBps=nil;return}
+        let proxy=trafficScope == .proxyOnly
+        uploadBps=p.value(proxy:proxy,upload:true);downloadBps=p.value(proxy:proxy,upload:false)
+        speedHistory=(trafficComparison ?? []).compactMap{$0.value(proxy:proxy,upload:false)}
+        uploadSpeedHistory=(trafficComparison ?? []).compactMap{$0.value(proxy:proxy,upload:true)}
+    }
+    mutating func recordTrafficComparison(_ p:TrafficPairPoint) {
+        trafficComparison=Array(((trafficComparison ?? [])+[p]).suffix(30))
+        selectTrafficComparison()
     }
 }

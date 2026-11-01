@@ -98,3 +98,8 @@ Mac 监测、Nikki、VPN、Codex 重置左键菜单栏显示单张悬浮卡片�
 ## 2026-10-30 工具箱统一更新
 
 [下载桌面工具箱 1.1.0 与 Nikki 1.4.0](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.30-suite1)。工具箱支持取消勾选后应用隐藏、避让保留原位卡片、全套检查与选择更新。[API 1.3.0](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.10.30-api3) 支持硅基网页登录缓存。其他工具使用原有完整合集下载。
+
+
+## 2026-11-01
+
+[下载 API 1.4.0、Nikki 1.4.1 与 VPN 1.4.4](https://github.com/SOSO-245/mac-desktop-widgets/releases/tag/v2026.11.01-r1)。API 新增自定义统计周期/手动额度，本版须手动安装，原更新签名公钥与旧清单保持不变；Nikki/VPN 新增同刻双范围曲线，支持原自动更新。

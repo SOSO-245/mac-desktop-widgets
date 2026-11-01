@@ -4,14 +4,14 @@ import argparse,hashlib,importlib.util,json,plistlib,re,subprocess,tempfile,zipf
 from pathlib import Path
 import xml.etree.ElementTree as ET
 ROOT=Path(__file__).resolve().parents[1]
-IDS={'desktop-toolbox':'local.homeatlas.Toolbox','nikki-card':'local.homeatlas.NikkiMonitor'}
+IDS={'vpn-card':'local.homeatlas.FlClashMonitor','nikki-card':'local.homeatlas.NikkiMonitor'}
 NS='http://www.andymatuschak.org/xml-namespaces/sparkle';ET.register_namespace('sparkle',NS)
 p=argparse.ArgumentParser();p.add_argument('--assets',type=Path,required=True);p.add_argument('--tag',required=True);p.add_argument('--account',required=True);a=p.parse_args()
 assert re.fullmatch(r'v[A-Za-z0-9.-]+',a.tag)
 spec=importlib.util.spec_from_file_location('helper',ROOT/'projects/desktop-toolbox/updater_build.py');helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
 bin=helper.prepare(ROOT/'projects/desktop-toolbox')/'bin'
 public=subprocess.check_output([str(bin/'generate_keys'),'--account',a.account,'-p'],text=True).strip()
-rows=json.loads((a.assets/'manifest.json').read_text());assert {r['project'] for r in rows}==set(IDS)
+all_rows=json.loads((a.assets/'manifest.json').read_text());rows=[r for r in all_rows if r['project'] in IDS];assert {r['project'] for r in rows}==set(IDS)
 feeds=[]
 for row in rows:
  slug=row['project'];zpath=a.assets/row['archive'];assert zpath.name==slug+'-macos.zip';assert hashlib.sha256(zpath.read_bytes()).hexdigest()==row['sha256']
@@ -36,4 +36,4 @@ with tempfile.TemporaryDirectory() as temp:
   ET.SubElement(i,'enclosure',{'url':f'https://github.com/SOSO-245/mac-desktop-widgets/releases/download/{a.tag}/{zpath.name}','length':str(zpath.stat().st_size),'type':'application/octet-stream','{'+NS+'}edSignature':sign(zpath,'-p')})
   f=Path(temp)/(slug+'.xml');ET.ElementTree(rss).write(f,encoding='utf-8',xml_declaration=True);sign(f);sign(f,'--verify')
  for row,_ in feeds:(ROOT/'updates'/(row['project']+'.xml')).write_bytes((Path(temp)/(row['project']+'.xml')).read_bytes())
-(a.assets/'manifest.json').write_text(json.dumps(rows,indent=2)+'\n');print('Selected signed XML and ZIPs verified; publish feeds only after assets are available.')
+(a.assets/'manifest.json').write_text(json.dumps(all_rows,indent=2)+'\n');print('Selected signed XML and ZIPs verified; publish feeds only after assets are available.')

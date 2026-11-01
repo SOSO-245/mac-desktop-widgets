@@ -336,10 +336,10 @@ struct FlClashCard: View {
                 .minimumScaleFactor(0.9)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            SpeedTrace(values: history, color: color)
+            SpeedTrace(values: history, comparison:snapshot.trafficComparison, scope:snapshot.trafficScope, upload:symbol == "arrow.up", color:color)
                 .frame(width: 56, height: 27)
                 .padding(.top, 7)
-                .help("最近 30 次\(title)速率采样")
+                .help("最近30次同刻采样 · 彩色：\(snapshot.trafficLabel)；半透明灰色：另一统计范围；两线共用刻度")
                 .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -406,30 +406,41 @@ struct FlClashCard: View {
 
 private struct SpeedTrace: View {
     let values: [Double]
+    let comparison: [TrafficPairPoint]?
+    let scope: TrafficScope
+    let upload: Bool
     let color: Color
-
     var body: some View {
-        Canvas { context, size in
-            let samples = values.suffix(30).map { $0.isFinite ? max(0, $0) : 0 }
-            guard !samples.isEmpty else { return }
-            let peak = max(1024, samples.max() ?? 0)
-            let points = samples.enumerated().map { index, value in
-                CGPoint(x: 1 + (size.width - 3) * Double(30 - samples.count + index) / 29,
-                        y: size.height - 2 - (size.height - 4) * value / peak)
+        Canvas { context,size in
+            let rows=comparison.map{Array($0.suffix(30))}
+            let active:[Double?]=rows?.map{$0.value(proxy:scope == .proxyOnly,upload:upload)} ?? Array(values.suffix(30)).map{Optional($0)}
+            let other:[Double?]=rows?.map{$0.value(proxy:scope != .proxyOnly,upload:upload)} ?? []
+            let peak=max(1024,(active+other).compactMap{$0}.filter{$0.isFinite && $0>=0}.max() ?? 0)
+            func points(_ samples:[Double?])->[CGPoint?] {
+                samples.enumerated().map {index,value in
+                    guard let v=value,v.isFinite,v>=0 else{return nil}
+                    return CGPoint(x:1+(size.width-3)*Double(30-samples.count+index)/29,
+                                   y:size.height-2-(size.height-4)*v/peak)
+                }
             }
-            guard let first = points.first, let last = points.last else { return }
-            var line = Path()
-            line.addLines(points)
-            var fill = line
-            fill.addLine(to: CGPoint(x: last.x, y: size.height))
-            fill.addLine(to: CGPoint(x: first.x, y: size.height))
-            fill.closeSubpath()
-            context.fill(fill, with: .linearGradient(Gradient(colors: [color.opacity(0.22), color.opacity(0.01)]),
-                                                     startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-            context.stroke(line, with: .color(color.opacity(0.85)),
-                           style: StrokeStyle(lineWidth: 1.25, lineCap: .round, lineJoin: .round))
-            context.fill(Path(ellipseIn: CGRect(x: last.x - 1.5, y: last.y - 1.5, width: 3, height: 3)),
-                         with: .color(color))
+            func line(_ points:[CGPoint?])->Path {
+                var p=Path();var begun=false
+                for point in points {if let point {if begun{p.addLine(to:point)}else{p.move(to:point);begun=true}}else{begun=false}}
+                return p
+            }
+            let ghost=points(other)
+            context.stroke(line(ghost),with:.color(.gray.opacity(0.48)),style:StrokeStyle(lineWidth:1.4,lineCap:.round,lineJoin:.round))
+            let front=points(active)
+            // Fill each valid segment separately; missing measurements stay gaps.
+            var segment:[CGPoint]=[]
+            func fill(_ segment:[CGPoint]) {
+                guard let first=segment.first,let last=segment.last,segment.count>1 else{return}
+                var p=Path();p.addLines(segment);p.addLine(to:CGPoint(x:last.x,y:size.height));p.addLine(to:CGPoint(x:first.x,y:size.height));p.closeSubpath()
+                context.fill(p,with:.linearGradient(Gradient(colors:[color.opacity(0.20),color.opacity(0.01)]),startPoint:.zero,endPoint:CGPoint(x:0,y:size.height)))
+            }
+            for point in front {if let point{segment.append(point)}else{fill(segment);segment=[]}};fill(segment)
+            context.stroke(line(front),with:.color(color.opacity(0.95)),style:StrokeStyle(lineWidth:1.35,lineCap:.round,lineJoin:.round))
+            if let last=front.last ?? nil {context.fill(Path(ellipseIn:CGRect(x:last.x-1.5,y:last.y-1.5,width:3,height:3)),with:.color(color))}
         }
     }
 }

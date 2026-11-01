@@ -60,13 +60,14 @@ struct Card: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 5) {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack { Text("OpenAI").font(.system(size: 13, weight: .semibold)); Spacer(); Text("本月消耗 ↗").font(.system(size: 9)).foregroundStyle(muted) }
+                    HStack { Text("OpenAI").font(.system(size: 13, weight: .semibold)); Spacer(); Text(store.periodLabel+" ↗").font(.system(size: 9)).foregroundStyle(muted) }
                     HStack(alignment: .firstTextBaseline) {
                         Text(store.costText).font(.system(size: 27, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(mint).minimumScaleFactor(0.6).lineLimit(1)
                         Spacer(minLength: 4)
                         Text(store.snapshot.usage.map { compact($0.value.total) + " Token" } ?? "Token —").font(.system(size: 10)).foregroundStyle(muted)
                     }
                 }.contentShape(Rectangle()).onTapGesture { openProvider("openai") }
+                creditSummary
                 UsageBars(store: store, height: 30)
                 stateLine(provider: "openai")
             }
@@ -97,14 +98,15 @@ struct Card: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .contentShape(Rectangle()).onTapGesture { openProvider("siliconflow") }.help("打开硅基流动登录与账单缓存窗口")
             }.frame(maxHeight: .infinity)
-            HStack { Circle().fill(store.preview ? .orange : mint).frame(width: 4, height: 4); Text(store.preview ? "示例数据" : "OpenAI · UTC 月份"); Spacer(); Button("设置连接", action: settings).buttonStyle(.plain).foregroundStyle(.cyan) }.font(.system(size: 9)).foregroundStyle(muted)
+            HStack { Circle().fill(store.preview ? .orange : mint).frame(width: 4, height: 4); Text(store.preview ? "示例数据" : store.periodRange); Spacer(); Button("设置连接", action: settings).buttonStyle(.plain).foregroundStyle(.cyan) }.font(.system(size: 9)).foregroundStyle(muted)
         }.frame(maxHeight: .infinity, alignment: .topLeading)
     }
     var medium: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("OpenAI · 本月消耗 ↗").foregroundStyle(muted).font(.system(size: 10))
+                Text("OpenAI · "+store.periodLabel+" ↗").foregroundStyle(muted).font(.system(size: 10))
                 Text(store.costText).font(.system(size: 25, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(mint).minimumScaleFactor(0.5).lineLimit(1).onTapGesture { openProvider("openai") }
+                creditSummary
                 UsageBars(store: store, height: 19)
             }.frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .trailing, spacing: 4) {
@@ -125,12 +127,19 @@ struct Card: View {
     }
     var small: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(selection == "deepseek" ? "DeepSeek · 余额 ↗" : selection == "tokens" ? "OpenAI · 本月 Token ↗" : "OpenAI · 本月消耗 ↗").font(.system(size: 9)).foregroundStyle(muted)
+            Text(selection == "deepseek" ? "DeepSeek · 余额 ↗" : selection == "tokens" ? "OpenAI · 本期 Token ↗" : "OpenAI · "+store.periodLabel+" ↗").font(.system(size: 9)).foregroundStyle(muted)
             Text(selection == "deepseek" ? store.balanceText : selection == "tokens" ? (store.snapshot.usage.map { compact($0.value.total) } ?? "—") : store.costText).font(.system(size: 27, weight: .medium, design: .rounded)).foregroundStyle(mint).lineLimit(1).minimumScaleFactor(0.3).onTapGesture { openProvider(selection == "deepseek" ? "deepseek" : "openai") }
-            if selection != "deepseek" { UsageBars(store: store, height: 18) }
+            if selection != "deepseek" { creditSummary;UsageBars(store: store, height: 18) }
             else { Text("本月消耗 · 官网查询").font(.system(size: 9)).foregroundStyle(muted).onTapGesture { openProvider("deepseek") } }
             Spacer(minLength: 0)
             Text(store.preview ? "示例数据" : "点击查看官方账单").font(.system(size: 8)).foregroundStyle(muted)
+        }
+    }
+    @ViewBuilder var creditSummary:some View {
+        if let allowance=store.allowanceText {
+            Text("额度 "+allowance+" · 估算余 "+(store.estimateText ?? "—"))
+                .font(.system(size:8)).foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.7)
+                .help("手动额度减去本期官方费用，非官方账户余额；不计算其他余额、退款或抵扣规则。项目筛选时不估算。")
         }
     }
     func stateLine(provider: String) -> some View {
@@ -148,6 +157,7 @@ struct Card: View {
 struct SettingsPanel: View {
     @ObservedObject var store: Store
     var changed: () -> Void
+    @State private var creditDraft=CreditSchedule()
     @State private var openKey = ""
     @State private var deepKey = ""
     @State private var project = UserDefaults.standard.string(forKey: "project") ?? ""
@@ -170,7 +180,7 @@ struct SettingsPanel: View {
                 Text("OpenAI 官方 API · DeepSeek · 硅基流动国内站").foregroundStyle(.secondary)
                 GroupBox("OpenAI · 组织 API 统计") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("读取 UTC 本月费用和文本生成 Token / 请求数。需要组织 Admin Key；不读取 ChatGPT 或 Codex 订阅套餐。余额暂无官方公开接口。").font(.callout).foregroundStyle(.secondary)
+                        Text("读取自选周期费用和文本生成 Token / 请求数（UTC 日统计）。需要组织 Admin Key；不读取 ChatGPT 或 Codex 订阅套餐。余额暂无官方公开接口。").font(.callout).foregroundStyle(.secondary)
                         SecureField(store.hasOpenAI ? "输入新 Admin Key 替换原连接" : "组织 Admin Key", text: $openKey)
                         TextField("项目 ID（可选；留空显示全组织）", text: $project)
                         HStack {
@@ -178,7 +188,29 @@ struct SettingsPanel: View {
                             Button("移除连接", role: .destructive) { store.remove("openai") }.disabled(!store.hasOpenAI || store.refreshing)
                             Spacer(); Link("官方用量控制台 ↗", destination: URL(string: "https://platform.openai.com/usage")!)
                         }
-                        Text("本月费用：\(store.costText)    余额：不支持查询").font(.headline)
+                        Text("\(store.periodLabel)：\(store.costText)    官方余额：官网查询").font(.headline)
+                        GroupBox("统计周期与到账额度") {
+                            VStack(alignment:.leading,spacing:10) {
+                                Stepper("每月 \(creditDraft.startDay) 日开始新周期",value:$creditDraft.startDay,in:1...31)
+                                TextField("之后每期额度（USD；留空不估算）",text:$creditDraft.regularUSD)
+                                Toggle("首次到账单独设置",isOn:$creditDraft.firstEnabled)
+                                if creditDraft.firstEnabled {
+                                    DatePicker("首次到账日",selection:$creditDraft.firstStart,in:...Date(),displayedComponents:.date)
+                                        .environment(\.timeZone,TimeZone(secondsFromGMT:0)!)
+                                    TextField("首次到账额度（USD）",text:$creditDraft.firstUSD)
+                                }
+                                Text("当前已保存："+store.periodRange).font(.caption).foregroundStyle(.secondary)
+                                if let allowance=store.allowanceText {
+                                    Text("本期手动额度："+allowance+" · 估算剩余："+(store.estimateText ?? "—")).font(.callout)
+                                }
+                                HStack {
+                                    Button("保存周期并重新统计") {store.saveCreditSchedule(creditDraft);changed()}
+                                        .disabled(store.refreshing || !creditDraft.valid)
+                                    Link("官网余额 / Credit grants ↗",destination:URL(string:"https://platform.openai.com/settings/organization/billing/credit-grants")!)
+                                }
+                                Text("按 UTC 自然日累计；首日包含当天到账前的消费。首次额度只用于首次周期，后续按每期额度重新计算，不滚存。估算剩余并非官方余额，不包含退款或抵扣优先级；账单有延迟时以官网为准。项目筛选时不显示额度剩余估算。").font(.caption).foregroundStyle(.secondary)
+                            }.padding(8)
+                        }
                         CostChart(points: store.snapshot.costHistory?.value ?? [], height: 72)
                             .contentShape(Rectangle()).onTapGesture { NSWorkspace.shared.open(URL(string: "https://platform.openai.com/usage")!) }
                         if let r = store.snapshot.usage {
@@ -219,7 +251,7 @@ struct SettingsPanel: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Picker("自动刷新", selection: $interval) { ForEach([1,5,15,30], id: \.self) { Text("\($0) 分钟").tag($0) } }.onChange(of: interval) { _, _ in store.schedule() }
                         Picker("桌面卡片", selection: $size) { Text("小号").tag("small"); Text("中号").tag("medium"); Text("大号").tag("large") }.pickerStyle(.segmented)
-                        Picker("菜单栏 / 小号卡片指标", selection: $selection) { Text("OpenAI 本月费用").tag("openai"); Text("DeepSeek 余额").tag("deepseek"); Text("OpenAI 本月 Token").tag("tokens") }
+                        Picker("菜单栏 / 小号卡片指标", selection: $selection) { Text("OpenAI 本期费用").tag("openai"); Text("DeepSeek 余额").tag("deepseek"); Text("OpenAI 本期 Token").tag("tokens") }
                         Picker("菜单栏颜色", selection: $menuColor) { Text("荧光绿").tag("mint"); Text("青色").tag("cyan"); Text("粉红").tag("pink"); Text("白色").tag("white") }
                         Toggle("显示菜单栏图标", isOn: $menuIcon)
                         Toggle("毛玻璃背景", isOn: $glass)
@@ -239,6 +271,7 @@ struct SettingsPanel: View {
                 Text("密钥仅保存在本机钥匙串。只读统计，不发起模型调用。缓存数据可能滞后，以平台账单为准。").font(.caption).foregroundStyle(.secondary)
             }.padding(26)
         }.frame(width: 660, height: 740)
+        .onAppear {creditDraft=store.creditSchedule}
         .onChange(of: size) { _, _ in changed() }.onChange(of: desktopVisible) { _, _ in changed() }
         .onChange(of: selection) { _, _ in changed() }.onChange(of: locked) { _, _ in changed() }
         .onChange(of: menuIcon) { _, _ in changed() }.onChange(of: menuColor) { _, _ in changed() }

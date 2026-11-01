@@ -69,17 +69,13 @@ final class MonitorCoordinator: ObservableObject {
     private var socket: URLSessionWebSocketTask?
     private var lastTraffic: Date?
     private var trafficScope = TrafficScope.load()
-    private var proxySampler = ProxyTrafficSampler()
+    private var proxySampler = DualTrafficSampler()
     func setTrafficScope(_ value: TrafficScope) {
         guard value != trafficScope else { return }
-        trafficScope = value
-        UserDefaults.standard.set(value.rawValue, forKey: "nikkiTrafficScope")
-        socket?.cancel(with: .goingAway, reason: nil); stream?.cancel(); socket = nil; stream = nil
-        proxySampler = ProxyTrafficSampler()
-        snapshot.trafficScope = value
-        snapshot.uploadBps = nil; snapshot.downloadBps = nil
-        snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
-        if let api, snapshot.isConnected { startTraffic(api, token: generation) }
+        trafficScope=value
+        UserDefaults.standard.set(value.rawValue,forKey:"nikkiTrafficScope")
+        snapshot.trafficScope=value
+        snapshot.selectTrafficComparison()
     }
     private var generation = UUID()
     var groups: [String] { proxies.keys.filter { proxies[$0]?["type"] as? String == "Selector" }.sorted() }
@@ -99,7 +95,7 @@ final class MonitorCoordinator: ObservableObject {
                 if let last = self.lastTraffic, Date().timeIntervalSince(last) > 8 {
                     self.socket?.cancel(with: .goingAway, reason: nil); self.stream?.cancel(); self.stream = nil; self.socket = nil
                     self.snapshot.uploadBps = nil; self.snapshot.downloadBps = nil
-                    self.snapshot.speedHistory = []; self.snapshot.uploadSpeedHistory = []; self.lastTraffic = nil
+                    self.snapshot.trafficComparison = nil; snapshot.speedHistory = []; self.snapshot.uploadSpeedHistory = []; self.lastTraffic = nil
                 }
                 self.refresh()
             }
@@ -172,7 +168,7 @@ final class MonitorCoordinator: ObservableObject {
                 guard generation == token, !Task.isCancelled else { return }
                 snapshot.isConnected = false; snapshot.connectionState = (error as? APIError)?.localizedDescription ?? ((error as? URLError)?.code == .notConnectedToInternet ? "请允许本地网络访问" : "旁路由暂时无法连接")
                 snapshot.connectionCount = nil; snapshot.nodeName = nil; snapshot.latencyMS = nil; snapshot.uploadBps = nil; snapshot.downloadBps = nil
-                snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
+                snapshot.trafficComparison = nil; snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
                 proxies = [:]; providers = [:]; applySubscription()
                 socket?.cancel(with: .goingAway, reason: nil); stream?.cancel(); stream = nil; socket = nil
             }
@@ -180,10 +176,8 @@ final class MonitorCoordinator: ObservableObject {
         }
     }
     private func startTraffic(_ api: NikkiAPI, token: UUID) {
-        let scope = trafficScope
-        proxySampler = ProxyTrafficSampler()
-        guard let request = try? api.request([scope == .all ? "traffic" : "connections"],
-                                            query: scope == .all ? [] : [URLQueryItem(name:"interval",value:"1000")], websocket: true) else { return }
+        proxySampler = DualTrafficSampler()
+        guard let request = try? api.request(["connections"], query:[URLQueryItem(name:"interval",value:"1000")], websocket:true) else { return }
         let socket = api.session.webSocketTask(with: request); socket.maximumMessageSize = 8_000_000; self.socket = socket; socket.resume(); lastTraffic = Date()
         stream = Task {
             do {
@@ -192,23 +186,19 @@ final class MonitorCoordinator: ObservableObject {
                     guard generation == token, !Task.isCancelled, self.socket === socket else { return }
                     let data: Data
                     switch message { case .data(let d): data = d; case .string(let s): data = Data(s.utf8); @unknown default: continue }
-                    let sample = scope == .all ? TrafficSample.decode(data)
-                        : proxySampler.sample(data, proxyTypes: proxies.compactMapValues { $0["type"] as? String })
-                    guard let sample else {
-                        snapshot.uploadBps = nil; snapshot.downloadBps = nil
-                        snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
+                    guard let pair=proxySampler.sample(data,proxyTypes:proxies.compactMapValues{$0["type"] as? String}) else {
+                        snapshot.uploadBps=nil;snapshot.downloadBps=nil
+                        snapshot.speedHistory=[];snapshot.uploadSpeedHistory=[];snapshot.trafficComparison=nil
                         continue
                     }
-                    snapshot.uploadBps = sample.uploadBps; snapshot.downloadBps = sample.downloadBps
-                    snapshot.sampledAt = Date()
-                    if let down = snapshot.downloadBps { snapshot.speedHistory = Array((snapshot.speedHistory + [down]).suffix(30)) }
-                    if let up = snapshot.uploadBps { snapshot.uploadSpeedHistory = Array((snapshot.uploadSpeedHistory + [up]).suffix(30)) }
+                    snapshot.recordTrafficComparison(pair)
+                    snapshot.sampledAt=Date()
                     lastTraffic = Date()
                 }
             } catch {
                 guard generation == token, !Task.isCancelled, self.socket === socket else { return }
                 snapshot.uploadBps = nil; snapshot.downloadBps = nil
-                snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
+                snapshot.trafficComparison = nil; snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
                 stream = nil; self.socket = nil
             }
         }

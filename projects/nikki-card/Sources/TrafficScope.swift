@@ -90,3 +90,27 @@ struct ProxyTrafficSampler {
     }
 }
 
+
+/// Global counters include closed connections. Do not sum changing live totals.
+struct DualTrafficSampler {
+    private var proxySampler=ProxyTrafficSampler()
+    private var previous:(time:Double,up:Double,down:Double)?
+    mutating func sample(_ data:Data,proxyTypes:[String:String],time:Double=ProcessInfo.processInfo.systemUptime,date:Date=Date())->TrafficPairPoint? {
+        guard let json=try? JSONSerialization.jsonObject(with:data) as? [String:Any],
+              let raw=json["connections"],raw is NSNull || raw is [[String:Any]],time.isFinite else {self=Self();return nil}
+        let proxy=proxySampler.sample(data,proxyTypes:proxyTypes,time:time,date:date)
+        func number(_ key:String)->Double? {
+            guard let n=json[key] as? NSNumber,CFGetTypeID(n) != CFBooleanGetTypeID(),n.doubleValue.isFinite,n.doubleValue>=0 else{return nil}
+            return n.doubleValue
+        }
+        var up:Double?,down:Double?
+        if let u=number("uploadTotal"),let d=number("downloadTotal") {
+            if let old=previous,time>old.time,time-old.time<=5,u>=old.up,d>=old.down {
+                let a=(u-old.up)/(time-old.time),b=(d-old.down)/(time-old.time)
+                if a.isFinite,b.isFinite {up=a;down=b}
+            }
+            previous=(time,u,d)
+        } else {previous=nil}
+        return TrafficPairPoint(allDown:down,allUp:up,proxyDown:proxy?.downloadBps,proxyUp:proxy?.uploadBps)
+    }
+}

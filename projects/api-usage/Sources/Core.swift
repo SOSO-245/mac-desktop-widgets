@@ -31,19 +31,55 @@ struct Snapshot: Codable {
     var balances: Record<[Balance]>?
     var available: Bool?
 }
+/// OpenAI Costs has daily UTC buckets. Custom periods retain that boundary.
 struct Month {
-    let start: Date; let end: Date; let id: String
-    // Costs uses daily buckets. Ending inside today omits today's bucket;
-    // request through the next UTC midnight to include today's reported costs.
-    var costsEndExclusive: Date {
-        Date(timeIntervalSince1970: (floor(end.timeIntervalSince1970 / 86400) + 1) * 86400)
+    let start: Date; let end: Date; let id: String; let nextStart: Date
+    static var calendar: Calendar {
+        var c=Calendar(identifier:.gregorian);c.timeZone=TimeZone(secondsFromGMT:0)!;return c
     }
-    init(now: Date = Date()) {
-        var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(secondsFromGMT: 0)!
-        start = c.date(from: c.dateComponents([.year, .month], from: now))!
-        end = now
-        let p = c.dateComponents([.year, .month], from: now)
-        id = String(format: "%04d-%02d", p.year!, p.month!)
+    var costsEndExclusive: Date {
+        Date(timeIntervalSince1970:(floor(end.timeIntervalSince1970/86400)+1)*86400)
+    }
+    init(now: Date=Date(),startDay: Int=1,firstStart: Date?=nil) {
+        let c=Self.calendar;let day=min(31,max(1,startDay))
+        let thisMonth=c.date(from:c.dateComponents([.year,.month],from:now))!
+        func boundary(_ month:Date)->Date {
+            c.date(byAdding:.day,value:min(day,c.range(of:.day,in:.month,for:month)!.count)-1,to:month)!
+        }
+        let current=boundary(thisMonth)
+        let baseMonth=now<current ? c.date(byAdding:.month,value:-1,to:thisMonth)!:thisMonth
+        let regular=boundary(baseMonth)
+        nextStart=boundary(c.date(byAdding:.month,value:1,to:baseMonth)!)
+        if let firstStart {
+            let first=c.startOfDay(for:firstStart)
+            start=first>=regular && first<=now && first<nextStart ? first:regular
+        } else {start=regular}
+        end=now
+        let p=c.dateComponents([.year,.month,.day],from:start)
+        id=day==1 && firstStart==nil ? String(format:"%04d-%02d",p.year!,p.month!):String(format:"utc-d%d-%04d-%02d-%02d",day,p.year!,p.month!,p.day!)
+    }
+}
+struct CreditSchedule: Codable, Equatable {
+    var startDay=1
+    var regularUSD=""
+    var firstEnabled=false
+    var firstStart=Date()
+    var firstUSD=""
+    func period(now:Date=Date())->Month {Month(now:now,startDay:startDay,firstStart:firstEnabled ? firstStart:nil)}
+    static func amount(_ value:String)->Decimal? {
+        let v=value.trimmingCharacters(in:.whitespacesAndNewlines)
+        guard v.range(of:#"^(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,4})?$"#,options:.regularExpression) != nil else{return nil}
+        return Decimal(string:v,locale:Locale(identifier:"en_US_POSIX"))
+    }
+    var valid:Bool {(1...31).contains(startDay) && (regularUSD.isEmpty || Self.amount(regularUSD) != nil) && (!firstEnabled || Self.amount(firstUSD) != nil)}
+    func allowance(now:Date=Date())->Decimal? {
+        let p=period(now:now)
+        if firstEnabled,p.start==Month.calendar.startOfDay(for:firstStart),now>=p.start {return Self.amount(firstUSD)}
+        return Self.amount(regularUSD)
+    }
+    func estimatedRemaining(spent:Decimal?,now:Date=Date())->Decimal? {
+        guard let credit=allowance(now:now),let spent else{return nil}
+        return max(0,credit-spent)
     }
 }
 final class NoRedirect: NSObject, URLSessionTaskDelegate {

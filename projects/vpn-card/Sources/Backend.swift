@@ -244,18 +244,15 @@ final class FlClashMonitor: ObservableObject {
     @Published var snapshot = MonitorSnapshot()
 
     private var trafficScope = TrafficScope.load()
-    private var proxySampler = ProxyTrafficSampler()
+    private var proxySampler = DualTrafficSampler()
     private var proxyTypes: [String: String] = [:]
 
     func setTrafficScope(_ value: TrafficScope) {
         guard value != trafficScope else { return }
-        trafficScope = value
-        UserDefaults.standard.set(value.rawValue, forKey: "flclashTrafficScope")
-        disconnectTraffic()
-        snapshot.uploadBps = nil; snapshot.downloadBps = nil; snapshot.sampledAt = nil
-        snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
-        snapshot.trafficScope = value
-        if running { startTraffic() }
+        trafficScope=value
+        UserDefaults.standard.set(value.rawValue,forKey:"flclashTrafficScope")
+        snapshot.trafficScope=value
+        snapshot.selectTrafficComparison()
     }
 
     private var pollingTask: Task<Void, Never>?
@@ -396,7 +393,7 @@ final class FlClashMonitor: ObservableObject {
                 snapshot.nodeName = nil
                 snapshot.groupName = nil
                 snapshot.latencyMS = nil
-                snapshot.speedHistory = []
+                snapshot.trafficComparison = nil; snapshot.speedHistory = []
                 snapshot.uploadSpeedHistory = []
             }
             activeSubscription = subscription
@@ -540,18 +537,17 @@ final class FlClashMonitor: ObservableObject {
     }
 
     private func startTraffic() {
-        let path = trafficScope == .all ? "traffic" : "connections?interval=1000"
+        let path = "connections?interval=1000"
         guard running, controllerEnabled, snapshot.isRunning, trafficTask == nil,
               let url = URL(string: "ws://127.0.0.1:9090/\(path)") else { return }
-        let scope = trafficScope
-        proxySampler = ProxyTrafficSampler()
+        proxySampler = DualTrafficSampler()
         let currentGeneration = generation
         guard let request = try? FlClashAuthorization.apply(to: URLRequest(url: url), secret: controllerSecret) else {
             controllerIssue = "本机接口认证配置无效"
             return
         }
         let socket = session.webSocketTask(with: request)
-        socket.maximumMessageSize = scope == .all ? 16_384 : 8_000_000
+        socket.maximumMessageSize = 8_000_000
         webSocket = socket
         socketStartedAt = Date()
         socket.resume()
@@ -576,28 +572,12 @@ final class FlClashMonitor: ObservableObject {
                     case .string(let text): data = Data(text.utf8)
                     @unknown default: continue
                     }
-                    let sample = scope == .all ? TrafficSample.decode(data)
-                        : self.proxySampler.sample(data, proxyTypes: self.proxyTypes)
-                    guard let sample else {
-                        self.snapshot.uploadBps = nil; self.snapshot.downloadBps = nil
-                        self.snapshot.speedHistory = []; self.snapshot.uploadSpeedHistory = []
-                        self.snapshot.sampledAt = nil
-                        continue
+                    guard let pair=self.proxySampler.sample(data,proxyTypes:self.proxyTypes) else {
+                        self.clearSpeeds();continue
                     }
-                    let now = Date()
-                    self.lastTrafficAt = now
-                    self.snapshot.sampledAt = now
-                    self.snapshot.uploadBps = sample.uploadBps
-                    self.snapshot.downloadBps = sample.downloadBps
-                    self.snapshot.isConnected = true
-                    self.snapshot.speedHistory.append(sample.downloadBps)
-                    self.snapshot.uploadSpeedHistory.append(sample.uploadBps)
-                    if self.snapshot.speedHistory.count > 30 {
-                        self.snapshot.speedHistory.removeFirst(self.snapshot.speedHistory.count - 30)
-                    }
-                    if self.snapshot.uploadSpeedHistory.count > 30 {
-                        self.snapshot.uploadSpeedHistory.removeFirst(self.snapshot.uploadSpeedHistory.count - 30)
-                    }
+                    let now=Date();self.lastTrafficAt=now;self.snapshot.sampledAt=now
+                    self.snapshot.recordTrafficComparison(pair)
+                    self.snapshot.isConnected=true
                     self.updateConnectionState()
                 }
             } catch {
@@ -619,7 +599,7 @@ final class FlClashMonitor: ObservableObject {
     }
 
     private func disconnectTraffic() {
-        proxySampler = ProxyTrafficSampler()
+        proxySampler = DualTrafficSampler()
         trafficTask?.cancel()
         trafficTask = nil
         webSocket?.cancel(with: .goingAway, reason: nil)
@@ -633,7 +613,7 @@ final class FlClashMonitor: ObservableObject {
         snapshot.downloadBps = nil
         snapshot.sampledAt = nil
         snapshot.isConnected = false
-        snapshot.speedHistory = []
+        snapshot.trafficComparison = nil; snapshot.speedHistory = []
         snapshot.uploadSpeedHistory = []
         lastTrafficAt = nil
     }
@@ -654,5 +634,29 @@ final class FlClashMonitor: ObservableObject {
         else if let controllerIssue { snapshot.connectionState = controllerIssue }
         else if snapshot.isConnected { snapshot.connectionState = "实时连接" }
         else { snapshot.connectionState = "本机接口连接中" }
+    }
+}
+
+/// Global counters include closed connections. Do not sum changing live totals.
+struct DualTrafficSampler {
+    private var proxySampler=ProxyTrafficSampler()
+    private var previous:(time:Double,up:Double,down:Double)?
+    mutating func sample(_ data:Data,proxyTypes:[String:String],time:Double=ProcessInfo.processInfo.systemUptime,date:Date=Date())->TrafficPairPoint? {
+        guard let json=try? JSONSerialization.jsonObject(with:data) as? [String:Any],
+              let raw=json["connections"],raw is NSNull || raw is [[String:Any]],time.isFinite else {self=Self();return nil}
+        let proxy=proxySampler.sample(data,proxyTypes:proxyTypes,time:time,date:date)
+        func number(_ key:String)->Double? {
+            guard let n=json[key] as? NSNumber,CFGetTypeID(n) != CFBooleanGetTypeID(),n.doubleValue.isFinite,n.doubleValue>=0 else{return nil}
+            return n.doubleValue
+        }
+        var up:Double?,down:Double?
+        if let u=number("uploadTotal"),let d=number("downloadTotal") {
+            if let old=previous,time>old.time,time-old.time<=5,u>=old.up,d>=old.down {
+                let a=(u-old.up)/(time-old.time),b=(d-old.down)/(time-old.time)
+                if a.isFinite,b.isFinite {up=a;down=b}
+            }
+            previous=(time,u,d)
+        } else {previous=nil}
+        return TrafficPairPoint(allDown:down,allUp:up,proxyDown:proxy?.downloadBps,proxyUp:proxy?.uploadBps)
     }
 }
