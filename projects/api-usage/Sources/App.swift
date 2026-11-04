@@ -7,8 +7,11 @@ final class CardPanel: NSPanel {
         if dragEnabled, event.type == .leftMouseDown, event.window === self,
            event.locationInWindow.y > frame.height - 46,
            event.locationInWindow.x < frame.width - 66 {
+            let previousOrigin = frame.origin
             performDrag(with: event)
-            saveFrame(usingName: "APIUsageDesktop")
+            if frame.origin != previousOrigin {
+                CardPositionController.shared.saveUserMove(self, legacyName: "APIUsageDesktop", snap: true)
+            }
             return
         }
         super.sendEvent(event)
@@ -46,11 +49,12 @@ final class APIHostingView: NSHostingView<Card> {
         status.button?.target = self; status.button?.action = #selector(clicked)
         status.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         desktop = panel(); desktop.delegate = self
-        desktop.setFrameAutosaveName("APIUsageDesktop")
+        if !CardPositionController.shared.managed { desktop.setFrameAutosaveName("APIUsageDesktop") }
+        CardPositionController.shared.attach(desktop)
         floating = panel(); floating.level = .popUpMenu
         store.onChange = { [weak self] in self?.updateStatus() }
         apply()
-        if !desktop.setFrameUsingName("APIUsageDesktop"), let screen = NSScreen.main {
+        if !CardPositionController.shared.managed, !desktop.setFrameUsingName("APIUsageDesktop"), let screen = NSScreen.main {
             desktop.setFrameOrigin(NSPoint(x: screen.visibleFrame.maxX - desktop.frame.width - 24, y: screen.visibleFrame.maxY - desktop.frame.height - 24))
         }
         ToolboxBridge.shared.start(panel: desktop, changed: { [weak self] in self?.apply() }, settings: { [weak self] in self?.showSettings() })
@@ -80,6 +84,7 @@ final class APIHostingView: NSHostingView<Card> {
         desktop.isMovableByWindowBackground = false
         desktop.dragEnabled = !d.bool(forKey: "locked")
         desktop.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+        CardPositionController.shared.restore(allowOtherDisplay: desktop.alphaValue > 0)
         if d.bool(forKey: "desktopVisible") { desktop.orderFrontRegardless() } else { desktop.orderOut(nil) }
         updateStatus()
     }
@@ -138,7 +143,7 @@ final class APIHostingView: NSHostingView<Card> {
         }
         NSApp.activate(ignoringOtherApps: true); settings?.makeKeyAndOrderFront(nil)
     }
-    func windowDidMove(_ notification: Notification) { desktop?.saveFrame(usingName: "APIUsageDesktop"); ToolboxBridge.shared.didMove() }
+    func windowDidMove(_ notification: Notification) { guard !CardPositionController.shared.managed else { return }; desktop?.saveFrame(usingName: "APIUsageDesktop"); ToolboxBridge.shared.didMove() }
     func renderPreview() {
         let dir = CommandLine.arguments.last!
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)

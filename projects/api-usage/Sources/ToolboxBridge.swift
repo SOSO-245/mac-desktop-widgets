@@ -31,20 +31,20 @@ import AppKit
             if let b = u["brightness"] as? Double, b.isFinite { d.set(min(100,max(-100,b)), forKey: "brightness") }
             if let t = u["transparency"] as? Double, t.isFinite { d.set(min(80,max(0,t)), forKey: "transparency") }
             changed?()
+        case "restoreManagedPosition": CardPositionController.shared.restore()
         case "place":
             guard let panel, let x = u["x"] as? Double, let y = u["y"] as? Double, x.isFinite, y.isFinite else { return }
             var r = panel.frame; r.origin = NSPoint(x:x,y:y)
-            guard NSScreen.screens.contains(where: { $0.visibleFrame.contains(r) }) else { return }
-            move(r)
+            CardPositionController.shared.place(panel, frame: r)
         default: return
         }
         publish()
     }
     func didMove() {
-        guard !applying else { return }
+        guard !applying, !CardPositionController.shared.managed else { return }
         moveWork?.cancel()
         let task = DispatchWorkItem { [weak self] in
-            guard let self, let panel = self.panel else { return }
+            guard let self, let panel = self.panel, !CardPositionController.shared.managed else { return }
             if NSEvent.pressedMouseButtons != 0 { self.didMove(); return }
             let p = GridPreferences.read()
             if p.snap, let a = panel.screen?.visibleFrame {

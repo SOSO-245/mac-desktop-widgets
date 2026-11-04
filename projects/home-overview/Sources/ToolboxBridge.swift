@@ -17,13 +17,13 @@ import SwiftUI
         showAction=show;sizeAction=size;guard timer==nil else{return}
         DistributedNotificationCenter.default().addObserver(self,selector:#selector(receive(_:)),name:Self.command,object:nil)
         tokens.append(NotificationCenter.default.addObserver(forName:NSWindow.didMoveNotification,object:nil,queue:.main) {[weak self] n in
-            Task{@MainActor in guard let self,let w=n.object as? NSWindow,w===self.panel,!self.applying else{return};self.scheduleSnap()}
+            Task{@MainActor in guard let self,let w=n.object as? NSWindow,w===self.panel,!self.applying,!CardPositionController.shared.managed else{return};self.scheduleSnap()}
         })
         timer=Timer.scheduledTimer(withTimeInterval:2,repeats:true){[weak self] _ in Task{@MainActor in self?.publish()}}
         DispatchQueue.main.async{self.publish()}
     }
     private func scheduleSnap(){moveWork?.cancel();let job=DispatchWorkItem{[weak self] in
-        guard let self else{return};if NSEvent.pressedMouseButtons != 0 {self.scheduleSnap();return}
+        guard let self,!CardPositionController.shared.managed else{return};if NSEvent.pressedMouseButtons != 0 {self.scheduleSnap();return}
         let prefs=GridPreferences.read();guard prefs.snap,let p=self.panel,let a=p.screen?.visibleFrame else{self.publish();return}
         self.move(CardGrid.snapped(p.frame,area:a,anchor:NSPoint(x:prefs.anchorX ?? a.minX+20,y:prefs.anchorTop ?? a.maxY-20)))
     };moveWork=job;DispatchQueue.main.asyncAfter(deadline:.now()+0.2,execute:job)}
@@ -34,10 +34,11 @@ import SwiftUI
         case "show":showAction?(true)
         case "hide":showAction?(false)
         case "size":if let s=u["size"] as? String,["small","medium","large"].contains(s){sizeAction?(s)}
+        case "restoreManagedPosition": CardPositionController.shared.restore()
         case "place":
             guard let p=panel,let x=u["x"] as? Double,let y=u["y"] as? Double,x.isFinite,y.isFinite,abs(x)<100000,abs(y)<100000 else{return}
             var r=p.frame;r.origin=NSPoint(x:x,y:y)
-            if let screen=NSScreen.screens.first(where:{$0.visibleFrame.contains(r)}) {r.origin.x=max(screen.visibleFrame.minX,r.minX);move(r)}
+            CardPositionController.shared.place(p, frame: r)
         case "appearance":
             if let v=u["transparency"] as? Double,v.isFinite{DesktopCardAppearance.shared.transparency=min(80,max(0,v))}
             if let glass=u["glass"] as? Bool{DesktopCardAppearance.shared.glass=glass}

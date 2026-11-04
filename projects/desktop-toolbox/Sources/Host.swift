@@ -123,6 +123,21 @@ import ServiceManagement
         DispatchQueue.main.asyncAfter(deadline:.now()+2.5){self.poll();let ok=self.selected.allSatisfy{id in guard let s=self.states[id] else{return false};return s.brightness==self.brightness && s.transparency==self.transparency && (s.glass==self.glass || id=="local.homeatlas.LunarCalendar")};self.note=ok ? "外观已更新并核对，卡片位置保持不变。":"部分卡片未确认外观，请检查软件是否已更新。";self.busy=false}
     }
     func saveUndoRecord(){undoAvailable=true;try? FileManager.default.createDirectory(at:GridPreferences.folder,withIntermediateDirectories:true);if let d=try? JSONEncoder().encode(undo){try? d.write(to:GridPreferences.folder.appendingPathComponent("undo.json"),options:.atomic)}}
+    func takeOverCurrentPositions() {
+        guard !busy else { return }
+        poll()
+        var saved = Set<String>()
+        var failed = Set<String>()
+        for (id, state) in states {
+            do {
+                try ToolboxPosition.save(state.frame.rect, for: id)
+                send(id, "restoreManagedPosition")
+                saved.insert(id)
+            } catch { failed.insert(id) }
+        }
+        note = saved.isEmpty ? "没有可保存位置的卡片。" : "已保存当前位置：" + names(saved) + "。"
+        if !failed.isEmpty { note += "未能保存：" + names(failed) + "。" }
+    }
     func apply(saveUndo:Bool=true){
         let target=placements
         let toHide=hideExcluded ? excludedVisible:Set<String>()
@@ -242,6 +257,8 @@ struct ToolboxView:View {
                     Picker("起始位置",selection:$model.edge){Text("左上").tag("left");Text("右上").tag("right")}.pickerStyle(.segmented)
                     Toggle("拖动后吸附网格",isOn:$model.snap)
                     Toggle("应用后，尺寸变化自动重排",isOn:$model.automatic)
+                    Button("接管当前布局") { model.takeOverCurrentPositions() }.disabled(model.states.isEmpty)
+                    Text("工具箱记住当前卡片位置，登录后按保存的布局恢复。").font(.caption).foregroundStyle(.secondary)
                     Text("调整尺寸或顺序会自动勾选该卡片；确认应用后生效。未勾选卡片默认隐藏，可关闭上方开关以保留原位。系统小组件不参与排列。").font(.caption).foregroundStyle(.secondary)
                     Text(model.scopeMessage).font(.callout).foregroundStyle(.mint)
                     HStack{Button("恢复上次位置"){model.restore()}.disabled(!model.undoAvailable || model.busy);Spacer();Button("确认并应用排列"){model.apply()}.buttonStyle(.borderedProminent).disabled(model.busy || !model.canApply)}

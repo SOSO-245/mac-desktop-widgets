@@ -6,7 +6,7 @@ import updater_build
 
 ROOT = pathlib.Path(__file__).resolve().parent
 PROJECT = ROOT / 'HomeAtlas.xcodeproj'
-VERSION = '2.4.3'
+VERSION = '2.4.6'
 APP_NAME = '家庭概览'
 APP_FILES = ['ToolboxShared.swift', 'ToolboxBridge.swift', 'AppSettings.swift', 'LiveDesktopCard.swift', 'AppUpdater.swift', 'StatusPopover.swift', 'WidgetSelfRepair.swift', 'MenuCustomization.swift', 'Model.swift', 'EnergyCard.swift', 'PowerWater.swift', 'Host.swift', 'Garage.swift',
              'DashboardData.swift', 'DashboardView.swift', 'ClimateHistory.swift',

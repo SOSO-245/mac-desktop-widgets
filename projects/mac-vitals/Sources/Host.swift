@@ -11,7 +11,14 @@ final class VitalsPanel:NSPanel,DuckWaterWindow {
             let p=event.locationInWindow
             if duckWaterRegion?.contains(p) == true {super.sendEvent(event);return}
             if !(p.y>frame.height-48 && p.x>frame.width-95) {
-                if !locked{performDrag(with:event);saveFrame(usingName:"VitalsFrame")};return
+                if !locked {
+                    let previousOrigin = frame.origin
+                    performDrag(with: event)
+                    if frame.origin != previousOrigin {
+                        CardPositionController.shared.saveUserMove(self, legacyName: "VitalsFrame", snap: true)
+                    }
+                }
+                return
             }
         };super.sendEvent(event)
     }
@@ -38,7 +45,8 @@ final class VitalsPanel:NSPanel,DuckWaterWindow {
         panel.title="Mac 实时监测";panel.identifier=NSUserInterfaceItemIdentifier("MacVitalsCard");panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=true;panel.isReleasedWhenClosed=false;panel.hidesOnDeactivate=false
         panel.collectionBehavior=[.canJoinAllSpaces,.stationary,.fullScreenAuxiliary,.ignoresCycle]
         panel.locked=locked;panel.isMovable = !locked
-        if !panel.setFrameUsingName("VitalsFrame"){panel.center()}
+        if !CardPositionController.shared.managed, !panel.setFrameUsingName("VitalsFrame") { panel.center() }
+        CardPositionController.shared.attach(panel)
         host=NSHostingView(rootView:desktopCard());panel.contentView=host
         configureSettings();resize();updateLevel();makeMenu();updateStatus();if !hidden{panel.orderFrontRegardless()}
         duckWeather.onUpdate={[weak self] in guard let self,self.skin == .duck,!self.hidden else{return};self.host.rootView=self.desktopCard()}
@@ -112,10 +120,10 @@ final class VitalsPanel:NSPanel,DuckWaterWindow {
     func setCardTop(_ value:Bool){guard top != value else{return};top=value;UserDefaults.standard.set(top,forKey:"top");updateLevel();makeMenu()}
     @objc func toggleTop(){setCardTop(!top)}
     func updateLevel(){panel.level=top ? .floating:NSWindow.Level(rawValue:Int(CGWindowLevelForKey(.desktopIconWindow))+1)}
-    @objc func centerCard(){panel.center();panel.saveFrame(usingName:"VitalsFrame");showCard()}
+    @objc func centerCard(){panel.center();CardPositionController.shared.saveUserMove(panel, legacyName: "VitalsFrame");showCard()}
     func setCardSize(_ value:String){guard ["small","medium","large"].contains(value),size != value else{return};size=value;UserDefaults.standard.set(size,forKey:"cardSize");resize();makeMenu()}
     @objc func selectSize(_ i:NSMenuItem){if let value=i.representedObject as? String{setCardSize(value)}}
-    func resize(){var r=panel.frame;r.origin.y=r.maxY-dimensions.height;r.size=dimensions;if let area=panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame{r.origin.x=max(area.minX,min(r.minX,area.maxX-r.width));r.origin.y=max(area.minY,min(r.minY,area.maxY-r.height))};panel.setFrame(r,display:true);host.rootView=desktopCard();panel.saveFrame(usingName:"VitalsFrame")}
+    func resize(){var r=panel.frame;r.origin.y=r.maxY-dimensions.height;r.size=dimensions;if let area=panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame{r.origin.x=max(area.minX,min(r.minX,area.maxX-r.width));r.origin.y=max(area.minY,min(r.minY,area.maxY-r.height))};panel.setFrame(r,display:true);host.rootView=desktopCard();if CardPositionController.shared.managed { if panel.alphaValue > 0 { CardPositionController.shared.restore() } } else { panel.saveFrame(usingName:"VitalsFrame") }}
     func refreshLogin(){loginEnabled=SMAppService.mainApp.status == .enabled;loginNote=SMAppService.mainApp.status == .requiresApproval ? "请在系统设置的登录项中允许 Mac 实时监测。":""}
     func setLogin(_ value:Bool){
         do {
@@ -129,6 +137,6 @@ final class VitalsPanel:NSPanel,DuckWaterWindow {
     @objc func quit(){NSApp.terminate(nil)}
     func application(_ application:NSApplication,open urls:[URL]){showCard()}
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool{showCard();return false}
-    func applicationWillTerminate(_ notification:Notification){collector.stop();broker.stop();timer?.invalidate();panel.saveFrame(usingName:"VitalsFrame")}
+    func applicationWillTerminate(_ notification:Notification){collector.stop();broker.stop();timer?.invalidate();if !CardPositionController.shared.managed { panel.saveFrame(usingName:"VitalsFrame") }}
 }
 @main enum VitalsMain {static func main(){let app=NSApplication.shared;let d=VitalsDelegate();app.delegate=d;withExtendedLifetime(d){app.run()}}}

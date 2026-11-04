@@ -24,8 +24,11 @@ private final class CardPanel: NSPanel {
                 && (cardSize == .small ? (90...120).contains(fromTop) : (110...152).contains(fromTop))
             if NSRect(origin: .zero, size: size).contains(point), !onControl, !inSiteList, !inSpeeds {
                 guard !positionLocked else { return }
+                let previousOrigin = frame.origin
                 performDrag(with: event)
-                saveFrame(usingName: "NikkiLiveCardFrame")
+                if frame.origin != previousOrigin {
+                    CardPositionController.shared.saveUserMove(self, legacyName: "NikkiLiveCardFrame", snap: true)
+                }
                 return
             }
         }
@@ -78,7 +81,9 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.delegate = self
-        if panel.setFrameUsingName("NikkiLiveCardFrame") {
+        if CardPositionController.shared.managed {
+            CardPositionController.shared.attach(panel)
+        } else if panel.setFrameUsingName("NikkiLiveCardFrame") {
             // Preserve the user's top-left position while migrating old card sizes.
             let restored = panel.frame
             panel.setFrame(NSRect(x: restored.minX, y: restored.maxY - size.height,
@@ -88,8 +93,11 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         host = CardHostingView(rootView: desktopCard())
         panel.contentView = host
-        panel.setFrameAutosaveName("NikkiLiveCardFrame")
-        panel.saveFrame(usingName: "NikkiLiveCardFrame")
+        if !CardPositionController.shared.managed {
+            panel.setFrameAutosaveName("NikkiLiveCardFrame")
+            panel.saveFrame(usingName: "NikkiLiveCardFrame")
+            CardPositionController.shared.attach(panel)
+        }
         updateLevel()
         monitor.$snapshot.receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self else { return }
@@ -354,7 +362,9 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         host.rootView = desktopCard()
         panel.setFrame(frame, display: true)
-        panel.saveFrame(usingName: "NikkiLiveCardFrame")
+        if CardPositionController.shared.managed {
+            if panel.alphaValue > 0 { CardPositionController.shared.restore() }
+        } else { panel.saveFrame(usingName: "NikkiLiveCardFrame") }
         statusPopover.menu.items.first(where: { $0.title == "卡片尺寸" })?.submenu?.items.forEach {
             $0.state = ($0.representedObject as? String) == size.rawValue ? .on : .off
         }
@@ -415,7 +425,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.positionLocked = positionLocked
         panel.isMovable = !positionLocked
         panel.isMovableByWindowBackground = false
-        panel.saveFrame(usingName: "NikkiLiveCardFrame")
+        if !CardPositionController.shared.managed { panel.saveFrame(usingName: "NikkiLiveCardFrame") }
         host.rootView = desktopCard()
         if let item = statusPopover.menu.items.first(where: { $0.action == #selector(toggleLock) }) {
             item.title = positionLocked ? "解锁位置" : "锁定位置"
@@ -436,7 +446,7 @@ final class MonitorDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showCard(); return false
     }
     func applicationWillTerminate(_ notification: Notification) {
-        panel?.saveFrame(usingName: "NikkiLiveCardFrame")
+        if !CardPositionController.shared.managed { panel?.saveFrame(usingName: "NikkiLiveCardFrame") }
         widgetTimer?.invalidate();widgetBroker.stop()
         sites.stop()
         monitor.stop()

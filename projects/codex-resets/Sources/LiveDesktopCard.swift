@@ -5,7 +5,7 @@ private final class LiveCardPanel:NSPanel {
     override var canBecomeKey:Bool {true}
 }
 private final class LiveCardHostingView:NSHostingView<AnyView> {
-    override var mouseDownCanMoveWindow:Bool {true}
+    override var mouseDownCanMoveWindow:Bool { !CardPositionController.shared.managed }
 }
 @MainActor final class LiveDesktopCard:NSObject,ObservableObject {
     private var panel:LiveCardPanel?
@@ -27,9 +27,13 @@ private final class LiveCardHostingView:NSHostingView<AnyView> {
         self.content=content;self.refresh=refresh
         let p=LiveCardPanel(contentRect:NSRect(origin:.zero,size:dimensions),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
         p.title=title+" · 桌面卡片";p.identifier=NSUserInterfaceItemIdentifier("LiveDesktopCard")
-        p.isMovable = !locked;p.isMovableByWindowBackground=true;p.setFrameAutosaveName("LiveDesktopCard.Frame");p.backgroundColor = .clear;p.isOpaque=false;p.hasShadow=true;p.isReleasedWhenClosed=false;p.hidesOnDeactivate=false
+        p.isMovable = !locked;p.isMovableByWindowBackground=true;p.backgroundColor = .clear;p.isOpaque=false;p.hasShadow=true;p.isReleasedWhenClosed=false;p.hidesOnDeactivate=false
         p.collectionBehavior=[.canJoinAllSpaces,.stationary,.fullScreenAuxiliary,.ignoresCycle]
-        if !p.setFrameUsingName("LiveDesktopCard.Frame") {p.center()}
+        if !CardPositionController.shared.managed {
+            p.setFrameAutosaveName("LiveDesktopCard.Frame")
+            if !p.setFrameUsingName("LiveDesktopCard.Frame") {p.center()}
+        }
+        CardPositionController.shared.attach(p)
         panel=p;let h=LiveCardHostingView(rootView:AnyView(EmptyView()));p.contentView=h;host=h
         resize();updateLevel()
         if !hidden {p.orderFrontRegardless()}
@@ -48,14 +52,18 @@ private final class LiveCardHostingView:NSHostingView<AnyView> {
                 guard let start=self.dragStart,let origin=self.dragWindowStart else{return}
                 panel.setFrameOrigin(NSPoint(x:origin.x+mouse.x-start.x,y:origin.y+mouse.y-start.y))
             }.onEnded { [weak self] _ in
-                guard let self else{return};self.dragStart=nil;self.dragWindowStart=nil
-                self.panel?.saveFrame(usingName:"LiveDesktopCard.Frame");self.update()
+                guard let self, self.dragStart != nil else{return};self.dragStart=nil;self.dragWindowStart=nil
+                CardPositionController.shared.saveUserMove(self.panel, legacyName: "LiveDesktopCard.Frame", snap: true);self.update()
             },including:locked ? .subviews:.all))
     }
     private func resize() {
         guard let panel else {return};var frame=panel.frame;frame.origin.y=frame.maxY-dimensions.height;frame.size=dimensions
         if let area=panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {frame.origin.x=max(area.minX,min(frame.minX,area.maxX-frame.width));frame.origin.y=max(area.minY,min(frame.minY,area.maxY-frame.height))}
-        panel.setFrame(frame,display:true);panel.saveFrame(usingName:"LiveDesktopCard.Frame");update()
+        panel.setFrame(frame,display:true)
+        if CardPositionController.shared.managed {
+            if panel.alphaValue > 0 { CardPositionController.shared.restore() }
+        } else { panel.saveFrame(usingName:"LiveDesktopCard.Frame") }
+        update()
     }
     func setSize(_ value:String) {
         guard ["small","medium","large"].contains(value),value != size else{return}
@@ -79,7 +87,7 @@ private final class LiveCardHostingView:NSHostingView<AnyView> {
     }
     private func toggleLock() {setLocked(!locked)}
     private func updateLevel() {panel?.level=top ? .floating:NSWindow.Level(rawValue:Int(CGWindowLevelForKey(.desktopIconWindow))+1)}
-    func center() {panel?.center();panel?.saveFrame(usingName:"LiveDesktopCard.Frame")}
+    func center() {panel?.center();CardPositionController.shared.saveUserMove(panel, legacyName: "LiveDesktopCard.Frame")}
 }
 
 private struct DesktopCardSettings:View {
