@@ -48,7 +48,9 @@ final class APIHostingView: NSHostingView<Card> {
         status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         status.button?.target = self; status.button?.action = #selector(clicked)
         status.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        desktop = panel(); desktop.delegate = self
+        desktop = panel()
+        desktop.collectionBehavior.insert([.stationary, .ignoresCycle])
+        desktop.delegate = self
         if !CardPositionController.shared.managed { desktop.setFrameAutosaveName("APIUsageDesktop") }
         CardPositionController.shared.attach(desktop)
         floating = panel(); floating.level = .popUpMenu
