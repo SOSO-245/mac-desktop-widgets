@@ -8,8 +8,18 @@ final class MonitorCoordinator: ObservableObject {
     @Published var providers: [String:[String:Any]] = [:]
     @Published var switching = false
     @Published var actionMessage = ""
-    @Published private(set) var profiles = ConnectionProfiles.load()
-    private(set) var settings = ConnectionProfiles.load().connection(ConnectionProfiles.load().selected)
+    @Published private(set) var profiles: ConnectionProfiles
+    private(set) var settings: ConnectionSettings
+    private let makeAPI: (ConnectionSettings) -> NikkiAPI
+
+    init(profiles: ConnectionProfiles = .load(),
+         makeAPI: @escaping (ConnectionSettings) -> NikkiAPI = {
+             NikkiAPI(settings: $0, secret: Vault.read($0.endpoint))
+         }) {
+        self.profiles = profiles
+        self.settings = profiles.connection(profiles.selected)
+        self.makeAPI = makeAPI
+    }
     var source: MonitorSource { profiles.selected }
     var dashboard: String { profiles.dashboards[source.rawValue] ?? "" }
     func selectSource(_ target: MonitorSource) {
@@ -77,6 +87,98 @@ final class MonitorCoordinator: ObservableObject {
         snapshot.trafficScope=value
         snapshot.selectTrafficComparison()
     }
+    private var topLevelNodes: Set<String> = []
+    private var delayTask: Task<Void, Never>?
+    private var delayRequestID: UUID?
+    private var currentDelayTarget: NikkiDelayTarget?
+    private var lastDelayAttempt: ContinuousClock.Instant?
+    @Published private(set) var testingTarget: NikkiDelayTarget?
+    @Published private(set) var nodeTestMessage = ""
+    private struct DelayReading {
+        let milliseconds: Int?
+        let measuredAt: ContinuousClock.Instant
+    }
+    @Published private var delayReadings: [NikkiDelayTarget: DelayReading] = [:]
+
+    func delayTarget(_ name: String) -> NikkiDelayTarget? {
+        NikkiDelayTarget.resolve(name, proxies: proxies, providers: providers, topLevel: topLevelNodes)
+    }
+    func nodeDelay(_ name: String) -> Int? {
+        guard let target = delayTarget(name) else { return nil }
+        return displayDelay(target)
+    }
+    private func displayDelay(_ target: NikkiDelayTarget) -> Int? {
+        if let reading = delayReadings[target], ContinuousClock.now - reading.measuredAt < .seconds(120) {
+            return reading.milliseconds
+        }
+        return NikkiData.recentDelay(proxies[target.node])
+    }
+    private func cancelDelay() {
+        delayTask?.cancel()
+        delayTask = nil
+        delayRequestID = nil
+        testingTarget = nil
+        nodeTestMessage = ""
+    }
+    private func updateNodeDelay(force: Bool = false) {
+        let target = delayTarget(settings.group)
+        if target != currentDelayTarget || force {
+            cancelDelay()
+            currentDelayTarget = target
+            lastDelayAttempt = nil
+        }
+        guard let target else {
+            snapshot.latencyMS = nil
+            snapshot.latencyKind = "当前线路不支持节点测速"
+            return
+        }
+        snapshot.latencyMS = displayDelay(target)
+        if testingTarget == target {
+            snapshot.latencyKind = "正在测速"
+        } else if let reading = delayReadings[target], ContinuousClock.now - reading.measuredAt < .seconds(120) {
+            snapshot.latencyKind = reading.milliseconds == nil ? "测速未成功" : "主动测速"
+        } else {
+            snapshot.latencyKind = snapshot.latencyMS == nil ? "等待测速" : "最近测速"
+        }
+        guard !switching, testingTarget == nil,
+              lastDelayAttempt.map({ ContinuousClock.now - $0 >= .seconds(30) }) ?? true else { return }
+        measure(target)
+    }
+    func testNode(_ name: String) {
+        guard !switching, testingTarget == nil, let target = delayTarget(name) else { return }
+        measure(target, manual: true)
+    }
+    private func measure(_ target: NikkiDelayTarget, manual: Bool = false) {
+        guard snapshot.isConnected, let api, delayTask == nil else { return }
+        let requestID = UUID()
+        let token = generation
+        delayRequestID = requestID
+        testingTarget = target
+        if target == currentDelayTarget {
+            lastDelayAttempt = .now
+            snapshot.latencyKind = "正在测速"
+        }
+        if manual { nodeTestMessage = "正在测速…" }
+        delayTask = Task {
+            let delay = try? await api.measure(target)
+            guard generation == token, delayRequestID == requestID, !Task.isCancelled else { return }
+            delayTask = nil
+            delayRequestID = nil
+            testingTarget = nil
+            let now = ContinuousClock.now
+            delayReadings = delayReadings.filter { now - $0.value.measuredAt < .seconds(120) }
+            if delayReadings.count >= 64, let oldest = delayReadings.min(by: { $0.value.measuredAt < $1.value.measuredAt }) {
+                delayReadings.removeValue(forKey: oldest.key)
+            }
+            delayReadings[target] = DelayReading(milliseconds: delay, measuredAt: now)
+            if target == currentDelayTarget {
+                snapshot.latencyMS = delay
+                snapshot.latencyKind = delay == nil ? "测速未成功" : "主动测速"
+            }
+            if manual { nodeTestMessage = delay.map { "测速完成 · \($0) ms" } ?? "测速未成功，可重试" }
+        }
+    }
+
     private var generation = UUID()
     var groups: [String] { proxies.keys.filter { proxies[$0]?["type"] as? String == "Selector" }.sorted() }
     var subscriptions: [String] { providers.keys.filter { providers[$0]?["subscriptionInfo"] != nil }.sorted() }
@@ -86,7 +188,7 @@ final class MonitorCoordinator: ObservableObject {
         guard (try? ConnectionSettings.normalized(settings.endpoint)) != nil else {
             snapshot.connectionState = "请在设置中填写控制接口"; return
         }
-        api = NikkiAPI(settings: settings, secret: Vault.read(settings.endpoint))
+        api = makeAPI(settings)
         refresh()
         timer = Task { [weak self] in
             while !Task.isCancelled {
@@ -102,6 +204,12 @@ final class MonitorCoordinator: ObservableObject {
         }
     }
     func stop() {
+        cancelDelay()
+        delayReadings = [:]
+        topLevelNodes = []
+        currentDelayTarget = nil
+        lastDelayAttempt = nil
+        nodeTestMessage = ""
         generation = UUID(); subscriptionTask?.cancel(); subscriptionTask = nil; subscriptionRefreshing = false; timer?.cancel(); polling?.cancel(); stream?.cancel()
         timer = nil; polling = nil; stream = nil
         socket?.cancel(with: .goingAway, reason: nil); socket = nil; api?.close(); api = nil; lastTraffic = nil
@@ -119,18 +227,17 @@ final class MonitorCoordinator: ObservableObject {
         settings.save(); profiles.entries[source.rawValue] = settings; profiles.save()
     }
     func chooseGroup(_ group: String) {
-        guard groups.contains(group) else { return }
+        guard !switching, groups.contains(group) else { return }
         settings.group = group; persistSelection(); applyProxies(); refresh()
     }
     func chooseProvider(_ name: String) {
         settings.provider = name; persistSelection(); applySubscription()
     }
-    private func applyProxies() {
+    private func applyProxies(forceDelay: Bool = false) {
         let group = settings.group
         snapshot.groupName = group
         snapshot.nodeName = NikkiData.leaf(group, proxies: proxies)
-        snapshot.latencyMS = snapshot.nodeName.flatMap { NikkiData.recentDelay(proxies[$0]) }
-        snapshot.latencyKind = source.title + " 最近测速"
+        updateNodeDelay(force: forceDelay)
         snapshot.routeIdentity = settings.endpoint + "|" + group + "|" + proxies.keys.sorted().compactMap { name in
             (proxies[name]?["now"] as? String).map { name + ":" + $0 }
         }.joined(separator: "|")
@@ -143,29 +250,32 @@ final class MonitorCoordinator: ObservableObject {
         NikkiData.subscription(chosen.flatMap { providers[$0] }, snapshot: &snapshot)
     }
     func refresh() {
-        guard polling == nil, let api else { return }
+        guard polling == nil, !switching, let api else { return }
         let token = generation
         polling = Task {
             do {
                 let data = try await api.json(["proxies"])
                 guard generation == token, !Task.isCancelled else { return }
                 guard let p = data["proxies"] as? [String:[String:Any]] else { throw URLError(.cannotParseResponse) }
-                proxies = p; snapshot.isConnected = true; snapshot.isRunning = true
+                snapshot.isConnected = true; snapshot.isRunning = true
                 snapshot.connectionState = "已连接 " + source.title; snapshot.sampledAt = Date()
                 if stream == nil { startTraffic(api, token: token) }
-                do {
-                    let data = try await api.json(["providers","proxies"])
-                    guard generation == token, !Task.isCancelled else { return }
-                    providers = data["providers"] as? [String:[String:Any]] ?? [:]
-                } catch { guard generation == token else { return }; providers = [:] }
+                let providerResponse = try? await api.json(["providers","proxies"])
+                guard generation == token, !Task.isCancelled else { return }
+                providers = providerResponse?["providers"] as? [String:[String:Any]] ?? [:]
+                topLevelNodes = Set(p.keys)
+                proxies = NikkiData.includingProviderNodes(p, providers: providers)
+                applyProxies()
+                refreshSubscription(manual: false)
                 let connections = try? await api.json(["connections"])
                 guard generation == token, !Task.isCancelled else { return }
                 snapshot.connectionCount = ConnectionMetrics.count(connections)
-                proxies = NikkiData.includingProviderNodes(p,providers:providers)
-                applyProxies()
-                refreshSubscription(manual: false)
             } catch {
                 guard generation == token, !Task.isCancelled else { return }
+                cancelDelay()
+                currentDelayTarget = nil
+                lastDelayAttempt = nil
+                delayReadings = [:]
                 snapshot.isConnected = false; snapshot.connectionState = (error as? APIError)?.localizedDescription ?? ((error as? URLError)?.code == .notConnectedToInternet ? "请允许本地网络访问" : "旁路由暂时无法连接")
                 snapshot.connectionCount = nil; snapshot.nodeName = nil; snapshot.latencyMS = nil; snapshot.uploadBps = nil; snapshot.downloadBps = nil
                 snapshot.trafficComparison = nil; snapshot.speedHistory = []; snapshot.uploadSpeedHistory = []
@@ -207,16 +317,26 @@ final class MonitorCoordinator: ObservableObject {
         guard !switching, let api, snapshot.isConnected else { return }
         let group = settings.group, token = generation
         switching = true; actionMessage = "正在切换…"
+        nodeTestMessage = ""
+        cancelDelay()
+        polling?.cancel()
+        polling = nil
         Task {
             do {
                 try await api.select(group: group, node: node)
                 guard generation == token else { return }
-                actionMessage = "已切换到 \(node)"; refresh()
+                var proxy = proxies[group]
+                proxy?["now"] = node
+                proxies[group] = proxy
+                switching = false
+                actionMessage = "已切换到 \(node)"
+                applyProxies(forceDelay: true)
             } catch {
                 guard generation == token else { return }
                 actionMessage = (error as? APIError)?.localizedDescription ?? "切换失败，请检查连接"
             }
             switching = false
+            refresh()
         }
     }
 }

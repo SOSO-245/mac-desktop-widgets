@@ -118,6 +118,18 @@ final class NikkiAPI {
         guard data.count < 16_000_000, let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw URLError(.cannotParseResponse) }
         return json
     }
+    func measure(_ target: NikkiDelayTarget) async throws -> Int {
+        let result = try await json(target.path, query: [
+            URLQueryItem(name: "url", value: "https://www.gstatic.com/generate_204"),
+            URLQueryItem(name: "timeout", value: "8000"),
+        ])
+        guard let delay = NikkiData.number(result["delay"]),
+              delay > 0, delay < 60_000, delay.rounded() == delay else {
+            throw URLError(.cannotParseResponse)
+        }
+        return Int(delay)
+    }
+
     func select(group: String, node: String) async throws {
         // Re-read the exact group immediately before the only mutating request.
         let current = try await json(["proxies", group])
@@ -128,6 +140,33 @@ final class NikkiAPI {
         _ = try await json(["proxies", group], method: "PUT", body: JSONSerialization.data(withJSONObject: ["name":node]))
         let confirmed = try await json(["proxies", group])
         guard confirmed["now"] as? String == node else { throw APIError.message("切换结果未确认，请刷新查看当前节点") }
+    }
+}
+
+struct NikkiDelayTarget: Hashable {
+    let node: String
+    let provider: String?
+
+    var path: [String] {
+        if let provider { return ["providers", "proxies", provider, node, "healthcheck"] }
+        return ["proxies", node, "delay"]
+    }
+
+    static func resolve(_ name: String, proxies: [String: [String: Any]],
+                        providers: [String: [String: Any]], topLevel: Set<String>) -> Self? {
+        guard let leaf = NikkiData.leaf(name, proxies: proxies),
+              !["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"].contains(leaf.uppercased()),
+              !["direct", "reject", "rejectdrop", "pass", "compatible"].contains(
+                (proxies[leaf]?["type"] as? String ?? "").lowercased()
+              ) else { return nil }
+        if topLevel.contains(leaf) { return Self(node: leaf, provider: nil) }
+        let matches = providers.keys.filter { provider in
+            (providers[provider]?["proxies"] as? [[String: Any]])?.contains {
+                $0["name"] as? String == leaf
+            } == true
+        }
+        guard matches.count == 1 else { return nil }
+        return Self(node: leaf, provider: matches[0])
     }
 }
 

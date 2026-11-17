@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory() as temp:
  for row,zpath in feeds:
   slug=row['project'];rss=ET.Element('rss',{'version':'2.0'});ch=ET.SubElement(rss,'channel');ET.SubElement(ch,'title').text=slug+' 软件更新';i=ET.SubElement(ch,'item');ET.SubElement(i,'title').text=row['version']
   for k,v in [('version',row['build']),('shortVersionString',row['version']),('minimumSystemVersion','14.0')]:ET.SubElement(i,'{'+NS+'}'+k).text=v
-  ET.SubElement(i,'description').text={'vpn-card':'修复订阅提供器节点名称与延迟缺失，保留双范围曲线，不切换节点或代理。','nikki-card':'当前/对照流量双曲线，同刻采样，切换不清空历史。'}[slug]
+  ET.SubElement(i,'description').text={'vpn-card':'修复订阅提供器节点名称与延迟缺失，保留双范围曲线，不切换节点或代理。','nikki-card':'切换节点后立即测速，并定期复测。节点列表可单独测速。'}[slug]
   ET.SubElement(i,'enclosure',{'url':f'https://github.com/SOSO-245/mac-desktop-widgets/releases/download/{a.tag}/{zpath.name}','length':str(zpath.stat().st_size),'type':'application/octet-stream','{'+NS+'}edSignature':sign(zpath,'-p')})
   f=Path(temp)/(slug+'.xml');ET.ElementTree(rss).write(f,encoding='utf-8',xml_declaration=True);sign(f);sign(f,'--verify')
  for row,_ in feeds:(ROOT/'updates'/(row['project']+'.xml')).write_bytes((Path(temp)/(row['project']+'.xml')).read_bytes())

@@ -98,14 +98,21 @@ struct NodePickerView: View {
                                 }
                             }
                             Spacer()
-                            if let leaf = NikkiData.leaf(name,proxies:monitor.proxies), let delay = NikkiData.recentDelay(monitor.proxies[leaf]) {
+                            if let delay = monitor.nodeDelay(name) {
                                 Text("\(delay) ms").foregroundStyle(.mint).monospacedDigit()
+                            }
+                            if let target = monitor.delayTarget(name) {
+                                Button(monitor.testingTarget == target ? "测速中" : "测速") { monitor.testNode(name) }
+                                    .disabled(monitor.testingTarget != nil || monitor.switching || !monitor.snapshot.isConnected)
                             }
                             Button(name == current ? "已选" : "切换") { monitor.select(node:name) }
                                 .disabled(name == current || monitor.switching || !monitor.snapshot.isConnected)
                         }.padding(10).background(.white.opacity(0.045),in:RoundedRectangle(cornerRadius:10))
                     }
                 }
+            }
+            if !monitor.nodeTestMessage.isEmpty {
+                Text(monitor.nodeTestMessage).font(.callout).foregroundStyle(.secondary)
             }
             Text(monitor.actionMessage.isEmpty ? monitor.snapshot.connectionState : monitor.actionMessage)
                 .font(.callout).foregroundStyle(.secondary).lineLimit(2)

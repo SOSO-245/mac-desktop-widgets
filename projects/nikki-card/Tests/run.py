@@ -10,7 +10,16 @@ class Mock(http.server.BaseHTTPRequestHandler):
         if obj is not None:self.wfile.write(json.dumps(obj).encode())
     def do_GET(self):
         if self.headers.get('Authorization')!='Bearer mock-only':return self.reply(401)
-        p=urllib.parse.unquote(self.path)
+        url=urllib.parse.urlsplit(self.path)
+        p=urllib.parse.unquote(url.path)
+        if p=='/proxies':
+            return self.reply(200,{'proxies':{'组 / # ?':{'type':'Selector','now':Mock.node,'all':['初始','目标 🇯🇵 / #']},'初始':{'type':'Vless'}}})
+        if p=='/providers/proxies':
+            return self.reply(200,{'providers':{'套餐 / #':{'proxies':[{'type':'Vless','name':'目标 🇯🇵 / #'}]}}})
+        if p in ['/proxies/初始/delay','/providers/proxies/套餐 / #/目标 🇯🇵 / #/healthcheck']:
+            assert urllib.parse.parse_qs(url.query)=={'url':['https://www.gstatic.com/generate_204'],'timeout':['8000']}
+            return self.reply(200,{'delay':111 if p.startswith('/proxies/') else (224 if Mock.writes else 223)})
+        if p=='/connections' and not url.query: return self.reply(200,{'connections':[]})
         if p=='/redirect':
             self.send_response(302);self.send_header('Location','/leak');self.end_headers();return
         if p=='/leak':Mock.redirected+=1;return self.reply(200,{})
@@ -25,7 +34,7 @@ class Mock(http.server.BaseHTTPRequestHandler):
         Mock.node=body['name'];Mock.writes+=1;self.reply(204)
 with tempfile.TemporaryDirectory(prefix='nikki-tests-') as tmp:
     binary=Path(tmp)/'tests'
-    subprocess.run(['xcrun','swiftc','-swift-version','5','-parse-as-library',str(root/'Sources/Model.swift'),str(root/'Sources/Controller.swift'),str(root/'Sources/MenuBarDisplay.swift'),str(root/'Tests/CoreTests.swift'),'-o',str(binary)],check=True)
+    subprocess.run(['xcrun','swiftc','-swift-version','5','-parse-as-library',str(root/'Sources/Model.swift'),str(root/'Sources/Controller.swift'),str(root/'Sources/MenuBarDisplay.swift'),*[str(root/'Sources'/name) for name in ('MonitorCoordinator.swift','TrafficScope.swift','SubscriptionRefresh.swift')],str(root/'Tests/CoreTests.swift'),'-o',str(binary)],check=True)
     server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Mock)
     threading.Thread(target=server.serve_forever,daemon=True).start()
     try:subprocess.run([str(binary),str(server.server_port)],check=True)

@@ -1,6 +1,6 @@
 import Foundation
 @main struct CoreTests {
-    static func main() async throws {
+    @MainActor static func main() async throws {
         var passed = 0
         func check(_ ok: @autoclosure () -> Bool, _ label: String) {
             precondition(ok(),label); passed += 1
@@ -79,7 +79,37 @@ import Foundation
         check(ws.url?.scheme == "ws" && ws.value(forHTTPHeaderField:"Authorization") != nil,"ws auth")
         do { _ = try await api.json(["redirect"]); fatalError("followed redirect") } catch APIError.status(let code) { check(code == 302,"reject redirect") }
         do { try await api.select(group:"组 / # ?",node:"invalid"); fatalError("invalid node accepted") } catch APIError.message { passed += 1 }
-        try await api.select(group:"组 / # ?",node:"目标 🇯🇵 / #")
+        let group = "组 / # ?"
+        let initial = "初始"
+        let selected = "目标 🇯🇵 / #"
+        var connection = api.settings
+        connection.group = group
+        let monitor = MonitorCoordinator(profiles: ConnectionProfiles(entries: ["nikki": connection]),
+                                         makeAPI: { NikkiAPI(settings: $0, secret: "mock-only") })
+        defer { monitor.stop() }
+        func waitUntil(_ predicate: () -> Bool) async throws {
+            for _ in 0..<160 {
+                if predicate() { return }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            throw URLError(.timedOut)
+        }
+        monitor.start()
+        try await waitUntil { monitor.snapshot.nodeName == initial && monitor.snapshot.latencyMS == 111 }
+        check(monitor.snapshot.latencyKind == "主动测速", "automatically measures node with no history")
+        monitor.testNode(selected)
+        try await waitUntil { monitor.nodeDelay(selected) == 223 && monitor.testingTarget == nil }
+        check(monitor.snapshot.nodeName == initial && monitor.snapshot.latencyMS == 111, "candidate probe only affects its row")
+        let before = try await api.json(["stats"])
+        check(before["writes"] as? Int == 0, "candidate probe never switches")
+        monitor.select(node: selected)
+        try await waitUntil { monitor.snapshot.nodeName == selected && monitor.snapshot.latencyMS == 224 && monitor.testingTarget == nil }
+        check(monitor.snapshot.latencyKind == "主动测速", "confirmed switch measures provider-only leaf")
+        for _ in 0..<3 {
+            monitor.refresh()
+            try await Task.sleep(for: .milliseconds(150))
+        }
+        check(monitor.snapshot.latencyMS == 224 && monitor.snapshot.latencyKind == "主动测速", "poll with empty history keeps active result")
         let result = try await api.json(["stats"])
         check(result["writes"] as? Int == 1,"exactly one switch")
         try await api.select(group:"组 / # ?",node:"目标 🇯🇵 / #")
